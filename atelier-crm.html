@@ -490,8 +490,8 @@ const LIM={week:10,accounts:20};
 const C_STAGE=Object.fromEntries([...PROSPECT,{k:"pipeline",l:"En pipeline",c:"--c-conv"}].map(s=>[s.k,s]));
 /* Opportunités : board Pipeline */
 const PIPE=[
-  {k:"repondu",l:"Ont répondu",c:"--c-rep",d:"Contacts qui ont répondu, et leurs opportunités à qualifier",p:10},
-  {k:"r1",l:"R1 · call",c:"--c-call",d:"Call planifié ou tenu",p:35},
+  {k:"repondu",l:"A répondu",c:"--c-rep",d:"Contacts qui ont répondu, et leurs opportunités à qualifier",p:10},
+  {k:"r1",l:"R1",c:"--c-call",d:"Call planifié ou tenu",p:35},
   {k:"attente",l:"Attente · négociation",c:"--c-attente",d:"Attente de décision ou discussion en cours",p:65},
   {k:"signe",l:"Signé",c:"--c-signe",d:"Devis accepté",p:100},
   {k:"perdu",l:"Perdu · plus tard",c:"--c-perdu",d:"Avec la raison documentée",p:0},
@@ -1297,7 +1297,7 @@ function drawerQuick(kind,d){
     <label class="field"><span class="label">Type de compte</span><select id="q-atype">${opt(ACC_TYPES,"studio")}</select></label>
     <label class="field"><span class="label">Pays / marché</span><input id="q-pays"></label>`;
   if(kind==="opp"){const sel=d.compteId||"";const a=accs.find(x=>x.id===sel);
-    body=`<label class="field full"><span class="label">Nom de l'opportunité</span><input id="q-nom" placeholder="Renfort DA printemps, refonte identité…" autofocus></label>
+    body=`${d.stage&&d.stage!=="repondu"?`<div class="alert field full"><span>Pour passer ce prospect en <b>${esc(O_STAGE[d.stage].l)}</b>, créez son opportunité.</span></div>`:""}<label class="field full"><span class="label">Nom de l'opportunité</span><input id="q-nom" placeholder="Renfort DA printemps, refonte identité…" value="${esc(d.nom||"")}" autofocus></label>
     <label class="field full"><span class="label">Account</span><select id="q-compte">${accs.map(x=>`<option value="${esc(x.id)}" ${x.id===sel?"selected":""}>${esc(x.nom)}</option>`).join("")}</select></label>
     <label class="field full"><span class="label">Contact principal</span><select id="q-contact">${contactOptions(a||accs[0],d.contactId)}</select></label>
     <label class="field"><span class="label">Type de mission</span><select id="q-mission">${opt(MISSIONS,"da")}</select></label>
@@ -1710,7 +1710,9 @@ async function quickSave(kind){
     const id=uid();const contactId=val("q-contact");
     if(await save("opps",id,{nom,compteId:cid,contactId,mission:val("q-mission"),valeur:+val("q-valeur")||0,stage:"repondu",reach:1,next:{date:addDays(today(),3),label:O_NEXT.repondu[1]},hist:[{d:today(),t:"Opportunité ouverte"}],cree:today(),maj:today()},true)){
       const c=S.contacts.find(x=>x.id===contactId);if(c&&cboard(c)==="prospect")await save("contacts",c.id,{stage:"pipeline",converti:today(),next:null});
-      toast("Opportunité créée");open("opp",id)}
+      const target=(S.L&&S.L.d&&S.L.d.stage)||"repondu";
+      if(target!=="repondu")await runO({id,nom,compteId:cid,contactId,valeur:+val("q-valeur")||0,stage:"repondu",reach:1,hist:[{d:today(),t:"Opportunité ouverte"}]},target,true);
+      toast(target==="repondu"?"Opportunité créée":"Opportunité créée en « "+O_STAGE[target].l+" »");if(target!=="perdu")open("opp",id)}
   }
 }
 async function saveContact(quiet){
@@ -1802,6 +1804,7 @@ document.addEventListener("drop",async e=>{
   if(!drag)return;const[k,id]=drag.split(":");drag=null;
   if(k==="p"){const col=e.target.closest("[data-pdrop]");if(!col)return;e.preventDefault();const p=S.projets.find(x=>x.id===id),s=col.dataset.pdrop;if(!p||p.stage===s)return;const patch={stage:s};if(s==="facture"&&!p.facture)patch.facture=today();if(s==="paye"&&!p.paye)patch.paye=today();await save("projets",p.id,patch);toast((PSTAGES.find(x=>x.k===s)||{}).l);return}
   const col=e.target.closest("[data-drop]");if(!col)return;e.preventDefault();col.classList.remove("over");const s=col.dataset.drop;
+  if(k==="c"&&O_STAGE[s]&&s!=="repondu"){const c=S.contacts.find(x=>x.id===id);if(!c)return;open("quick",null,{kind:"opp",d:{contactId:c.id,compteId:compteKey(c),stage:s,nom:compteName(c)}});return}
   if(k==="c"){const c=S.contacts.find(x=>x.id===id);if(!c||!C_DROP[s])return;if(cstage(c)===s&&s!=="relance")return;if(s==="converti"&&cboard(c)==="pipe")return;await runC(c,C_DROP[s])}
   if(k==="o"){const o=S.opps.find(x=>x.id===id);if(!o||!O_STAGE[s]||ostage(o)===s)return;await runO(o,s)}
 });
