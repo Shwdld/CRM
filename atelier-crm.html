@@ -566,7 +566,7 @@ const actv=c=>cboard(c)==="pipe"?"pipeline":(c.activation&&ACT[c.activation]?c.a
 const onBoard=c=>cboard(c)==="prospect"&&["semaine","actif"].includes(actv(c));
 const boardAccounts=()=>new Set(S.contacts.filter(onBoard).map(c=>compteKey(c)||c.id));
 const weekUsed=()=>S.contacts.filter(c=>c.activeLe&&c.activeLe>=monday()).length;
-const isDue=c=>cboard(c)==="prospect"&&c.next&&c.next.date&&c.next.date<=today()&&(onBoard(c)||(actv(c)==="pause"&&DORMANT_C.includes(cstage(c))));
+const isDue=c=>(cstage(c)==="pipeline"&&!S.opps.some(o=>o.contactId===c.id&&OPEN.includes(ostage(o)))&&c.next&&c.next.date&&c.next.date<=today())||cboard(c)==="prospect"&&c.next&&c.next.date&&c.next.date<=today()&&(onBoard(c)||(actv(c)==="pause"&&DORMANT_C.includes(cstage(c))));
 function suggestScore(c){let s=0;if(actv(c)==="mois")s+=5;if((c.relances||0)>0)s+=3;s+={chaud:4,tiede:2,froid:0,dormant:-1}[chaleur(c)]||0;
   if(["tiede","ancien_client"].includes(c.type))s+=2;if(["reco","intro","inbound"].includes(c.source))s+=2;if(c.email||c.linkedin)s+=1;if(c.next&&c.next.date&&c.next.date<=today())s+=1;return s}
 function suggestReason(c){const r=[];if(actv(c)==="mois")r.push("prévu ce mois-ci");if((c.relances||0)>0)r.push("déjà contacté");if(["reco","intro","inbound"].includes(c.source))r.push(SOURCES[c.source].toLowerCase());
@@ -605,7 +605,7 @@ function applyC(c,ev,opts={}){
     case"sommeil":p.stage="sommeil";p.activation="pause";p.next={date:opts.date||addDays(t,75),label:"Fin de la pause : réactiver ?"};log("Mis en sommeil");break;
     case"reactiver":p.stage="reactiver";p.activation="pause";p.next={date:opts.date||addDays(t,30),label:"Réactiver avec un nouvel angle"};log("À réactiver");break;
     case"a_contacter":p.stage="a_contacter";p.next={date:t,label:"Envoyer le premier message"};break;
-    case"repondu":p.stage="pipeline";p.activation="";p.next=null;p.converti=t;log("A répondu · opportunité créée");break;
+    case"repondu":p.stage="pipeline";p.activation="";p.next={date:addDays(t,3),label:"Qualifier le besoin · créer une opportunité si besoin réel"};p.converti=t;log("A répondu");break;
     case"suivi":p.next={date:addDays(t,7),label:(c.next&&c.next.label)||"Suivi"};log("Suivi · "+((c.next&&c.next.label)||"contact"));break;
   }
   p.hist=h.slice(0,60);p.maj=t;return p;
@@ -743,7 +743,7 @@ function examplesNotice(){
   const n=["contacts","projets","comptes","opps"].reduce((t,k)=>t+S[k].filter(x=>x.exemple).length,0);
   return n?`<div class="notice"><span>Les fiches « exemple » sont fictives et servent de démonstration.</span><button class="btn sm" data-act="clear-ex">Supprimer les ${n} exemples</button></div>`:"";
 }
-function legacyNotice(){
+function legacyNotice(){return"";
   const n=S.contacts.filter(c=>c.legacy&&!S.opps.some(o=>o.contactId===c.id)).length;
   return n?`<div class="notice"><span>${plural(n,"fiche")} de l'ancien pipeline à convertir en opportunité.</span><button class="btn sm primary" data-act="migrate">Convertir</button></div>`:"";
 }
@@ -800,6 +800,7 @@ function questItems(){
 function quest(it){
   const x=it.x;
   if(it.k==="c"){const s=cstage(x),who=x.nom&&compteName(x)?x.nom+" · "+compteName(x):cname(x);
+    if(s==="pipeline")return{ev:"suivi",t:"Qualifier "+who,cat:"qualification",xp:3};
     if(s==="a_contacter")return{ev:"envoye",t:"Écrire à "+who,cat:"message",xp:1};
     if(DORMANT_C.includes(s))return{ev:"envoye",t:"Réactiver "+who,cat:"réactivation",xp:2};
     return{ev:"envoye",t:"Relancer "+who,cat:"relance",xp:1};}
@@ -907,9 +908,9 @@ function vProspect(){
   const cols=PROSPECT.map(s=>{const cs=list.filter(c=>cstage(c)===s.k).sort((a,b)=>((a.next&&a.next.date)||"9").localeCompare((b.next&&b.next.date)||"9"));
     return`<div class="col folder" data-drop="${s.k}">${colHead(s,cs.length)}${cs.map(pcardC).join("")}</div>`}).join("");
   const conv=list.filter(c=>cboard(c)==="pipe").sort((a,b)=>(b.converti||b.maj||"").localeCompare(a.converti||a.maj||""));
-  const archive=`<div class="col archive folder" data-drop="converti">${colHead({l:"Converti en opportunité",c:"--c-conv",d:"A répondu · l'opportunité suit son cours dans le Pipeline."},conv.length)}
-    ${conv.slice(0,40).map(c=>{const o=oppsOf(c)[0];return`<div class="arch" ${o?`data-openo="${o.id}"`:`data-open="${c.id}"`}><i class="dot" style="--c:var(${o?ocolor(o):"--c-conv"})"></i><b>${esc(cname(c))}</b><small>${o?esc(olabel(o)):"—"}</small></div>`}).join("")}</div>`;
-  return head("Prospection <em>&amp; relances</em>","Glissez une carte : la prochaine relance se calcule toute seule. Dès qu'un contact répond, son opportunité part dans le Pipeline.",`<button class="btn primary" data-act="new-contact">+ Contact</button>`)
+  const archive=`<div class="col archive folder" data-drop="converti">${colHead({l:"A répondu",c:"--c-conv",d:"Sort de la prospection. Créez une opportunité depuis la fiche si un besoin se confirme."},conv.length)}
+    ${conv.slice(0,40).map(c=>{const o=oppsOf(c)[0];return`<div class="arch" data-open="${c.id}"><i class="dot" style="--c:var(${o?ocolor(o):"--c-conv"})"></i><b>${esc(cname(c))}</b><small>${o?esc(olabel(o)):"Sans opportunité"}</small></div>`}).join("")}</div>`;
+  return head("Prospection <em>&amp; relances</em>","Glissez une carte : la prochaine relance se calcule toute seule. Quand un contact répond, il sort du board ; vous créez l'opportunité vous-même si un besoin se confirme.",`<button class="btn primary" data-act="new-contact">+ Contact</button>`)
    +legacyNotice()+activationPanel()+tagFilters(false)+`<div class="board-wrap"><div class="board">${cols}${archive}</div></div>`;
 }
 function pcardC(c){
@@ -1186,7 +1187,7 @@ function buildTab(rows,tab,defT,defS){
     const sent=dates.length||(!notYet&&(/envoy|relanc|attente/.test(st)||(/envoy|sent/.test(tabN)&&!/a envoyer|to send/.test(tabN))));
     /* « répondu », « intéressé »… mais jamais « pas de réponse », « sans réponse », « non intéressé » */
     const negative=/\b(pas|sans|aucune?|non|jamais|no)\b|attente de reponse/.test(st);
-    if(!negative&&/(\ba repondu\b|^repondu|reponse recue|\binteresse|call (fait|cale|prevu))/.test(st)){c.stage="pipeline";c.converti=today();c._opp=true}
+    if(!negative&&/(\ba repondu\b|^repondu|reponse recue|\binteresse|call (fait|cale|prevu))/.test(st)){c.stage="pipeline";c.converti=today();c._opp=true;c.next={date:today(),label:"Qualifier le besoin · créer une opportunité si besoin réel"}}
     else if(!sent){c.stage="a_contacter";c.next={date:today(),label:"Envoyer le premier message"};c.relances=0}
     else{const n=Math.max(1,dates.length);c.relances=n;const rr=rythme(c,n,last||today());c.stage=rr.stage;c.next=rr.next;
       if(/a relancer|relancer/.test(st)&&rr.stage!=="sommeil"){c.stage=n>1?"relance":"contacte";c.next={date:today(),label:"Relance "+n}}}
@@ -1254,7 +1255,7 @@ async function doImport(){
   if(!IMP)return;const btn=document.querySelector('[data-act="do-import"]');
   const plan=importPlan();const cache={};let n=0;
   for(const c of plan.keep){const{id,_opp,_tab,...body}=c;if(body.studio)body.compteId=await ensureCompte(body.studio,{pays:body.pays},cache);
-    if(await save("contacts",id,body,true)){n++;if(_opp)await newOppFor({...body,id},body.compteId)}if(btn)btn.textContent="Import… "+n+"/"+plan.keep.length}
+    if(await save("contacts",id,body,true))n++;if(btn)btn.textContent="Import… "+n+"/"+plan.keep.length}
   IMP=null;toast(n+" contacts importés");go("prospect");
 }
 
@@ -1311,7 +1312,7 @@ function drawerContact(c){
       <div class="row"><input id="c-nextlabel" value="${esc(c.next&&c.next.label||"")}" placeholder="Ex. relance avec le nouveau projet hôtel"><input type="date" id="c-nextdate" value="${c.next&&c.next.date||""}" aria-label="Date"></div>
       <div class="tip">${esc(tipFor(c))}${zoneHint(c)?"<br>"+esc(zoneHint(c)):""}</div>
       ${g?`<a class="btn sm" href="${g}" target="_blank" rel="noopener" style="align-self:flex-start">Ajouter à Google Agenda</a>`:""}</div>
-    ${pros?`<div><p class="label" style="margin:0 0 8px">Ce qui vient de se passer</p><div class="steps">${evBtn("envoye",cstage(c)==="a_contacter"||DORMANT_C.includes(cstage(c))?"Message envoyé":"Relance envoyée","--c-relance")}${evBtn("repondu","A répondu → opportunité","--c-conv")}${evBtn("sommeil","Mettre en sommeil","--c-sommeil")}${evBtn("reactiver","À réactiver","--c-react")}</div></div>`:""}
+    ${pros?`<div><p class="label" style="margin:0 0 8px">Ce qui vient de se passer</p><div class="steps">${evBtn("envoye",cstage(c)==="a_contacter"||DORMANT_C.includes(cstage(c))?"Message envoyé":"Relance envoyée","--c-relance")}${evBtn("repondu","A répondu","--c-conv")}${evBtn("sommeil","Mettre en sommeil","--c-sommeil")}${evBtn("reactiver","À réactiver","--c-react")}</div></div>`:""}
     <div><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span class="label">Opportunités · ${os.length}</span><button class="btn sm" data-act="new-opp" data-contact="${c.id}">+ Opportunité</button></div>
       <div class="sibs">${os.map(o=>`<div class="sib" data-openo="${o.id}">${avO(o,"sm")}<div class="grow"><b>${esc(o.nom)}</b> <span class="muted">${o.valeur?eur(o.valeur)+" · "+proba(o)+" %":""}</span></div>${otag(o)}</div>`).join("")||`<div class="muted" style="font-size:12.5px">Aucune pour l'instant.</div>`}</div></div>
     ${acc?`<div><p class="label" style="margin:0 0 8px">Même account · ${esc(acc.nom)}</p>
@@ -1536,7 +1537,7 @@ async function runC(c,ev,quiet){
   const p=applyC(c,ev,opts);
   if(!(await save("contacts",c.id,p)))return false;
   if(ev==="repondu"){let cid=compteKey(c);if(cid&&cid.startsWith("v:"))cid=await ensureCompte(c.studio);if(cid&&cid!==c.compteId)await save("contacts",c.id,{compteId:cid});
-    const oid=await newOppFor({...c,compteId:cid},cid);if(oid){toast("Opportunité créée : donnez-lui un nom","xp");open("opp",oid)}return true}
+    toast("Noté : a répondu. Créez une opportunité depuis la fiche si un besoin se confirme.","xp");return true}
   if(!quiet)toast(p.next?"Prochaine action : "+rel(p.next.date).toLowerCase():"Enregistré");
   return true;
 }
