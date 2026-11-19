@@ -438,7 +438,7 @@ body{background:radial-gradient(60vw 50vh at 100% 0%,color-mix(in srgb,var(--bei
 .title-edit{display:block;width:100%;font-family:var(--f-title);font-weight:400;font-size:40px;line-height:1.05;color:var(--fg);background:transparent;border:0;border-radius:14px;padding:2px 8px;margin-left:-8px;text-overflow:ellipsis}
 .title-edit:hover{background:color-mix(in srgb,var(--raised) 70%,transparent)}
 .title-edit:focus{outline:none;background:var(--raised);box-shadow:0 0 0 1.5px var(--brand)}
-.title-edit::placeholder{color:var(--fg);opacity:.85}
+.title-edit::placeholder{color:var(--late);opacity:.75;font-style:italic}
 .drawer-b>.actions:last-child{position:sticky;bottom:-28px;margin:0 -24px -28px;padding:14px 24px calc(14px + env(safe-area-inset-bottom,0px));background:color-mix(in srgb,var(--block) 90%,transparent);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);border-top:1px solid var(--line-soft);z-index:3}
 </style>
 
@@ -731,7 +731,7 @@ const ctag=c=>`<span class="tag" style="--c:var(${ccolor(c)})"><span class="dot"
 const otag=o=>`<span class="tag" style="--c:var(${ocolor(o)})"><span class="dot"></span>${esc(olabel(o))}</span>`;
 const stag=s=>`<span class="tag" style="--c:var(${ACC_STATUS[s].c})"><span class="dot"></span>${ACC_STATUS[s].l}</span>`;
 const initials=s=>(s||"?").replace(/\(.*?\)/g,"").split(/[\s\-]+/).filter(w=>/\p{L}/u.test(w)).slice(0,2).map(w=>w.match(/\p{L}/u)[0].toUpperCase()).join("")||"?";
-const cname=c=>c.nom||c.studio||"Sans nom";
+const cname=c=>c.nom||(c.studio?c.studio+" · contact à nommer":"Contact à nommer");
 const avC=(c,cls="")=>`<span class="av ${cls} ${cboard(c)==="prospect"&&cLate(c)?"is-late":""}" style="--c:var(${ccolor(c)})" title="${esc(cname(c))}">${esc(initials(cname(c)))}</span>`;
 const avO=(o,cls="")=>{const c=oContact(o);return`<span class="av ${cls} ${oLate(o)?"is-late":""}" style="--c:var(${ocolor(o)})">${esc(initials(c?cname(c):o.nom))}</span>`};
 const heatDots=v=>{const n={froid:1,tiede:2,chaud:3,dormant:0}[v]||0;return`<span class="temp"><span>${[1,2,3].map(i=>`<i class="${i<=n?"on":""}"></i>`).join("")}</span>${CHALEURS[v]||"—"}</span>`};
@@ -1298,7 +1298,7 @@ function drawerContact(c){
   const g=gcal(c.next&&c.next.label,c.next&&c.next.date,cname(c),[c.poste,compteName(c),c.email,c.linkedin,tipFor(c),zoneHint(c)].filter(Boolean).join("\n"));
   const evBtn=(e,l,col)=>`<button class="btn sm" data-cev="${e}" data-id="${c.id}"><i class="dot" style="--c:var(${col})"></i>${l}</button>`;
   return`<div class="scrim" data-close></div><aside class="drawer" role="dialog" aria-label="Fiche contact">
-  <div class="drawer-h"><div style="flex:1;min-width:0"><input class="title-edit" id="c-nom" value="${esc(c.nom||"")}" placeholder="${esc(cname(c))}" aria-label="Nom du contact" title="Cliquez pour modifier">
+  <div class="drawer-h"><div style="flex:1;min-width:0"><input class="title-edit" id="c-nom" value="${esc(c.nom||"")}" placeholder="Nom du contact à compléter" aria-label="Nom du contact" title="Cliquez pour modifier">
     <div class="sub">${esc(c.poste||"Poste à préciser")}${acc?` chez <button class="lnk" data-openc="${esc(acc.id)}">${esc(acc.nom)}</button>`:""}</div>
     <div class="sub">${ctag(c)}${heatDots(chaleur(c))}${TYPES[c.type]?`<span class="pill">${TYPES[c.type]}</span>`:""}${SOURCES[c.source]?`<span class="pill">${SOURCES[c.source]}</span>`:""}${c.exemple?'<span style="color:var(--faint)">exemple</span>':""}</div></div>
     <button class="round" data-close aria-label="Fermer">×</button></div>
