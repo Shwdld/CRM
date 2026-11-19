@@ -433,6 +433,13 @@ body{background:radial-gradient(60vw 50vh at 100% 0%,color-mix(in srgb,var(--bei
 .game.folder{--fbg:var(--brand);--tab-w:34%}
 .game.folder>.ring{margin-top:calc(-1 * var(--tab-h) + 6px)}
 @media (max-width:760px){.rail{margin:0;top:env(safe-area-inset-top,0px);height:auto;border-radius:0 0 24px 24px;border-width:0 0 1px}.folder{--tab-w:62%}}
+
+/* Titre de fiche modifiable + barre d'enregistrement toujours visible */
+.title-edit{display:block;width:100%;font-family:var(--f-title);font-weight:400;font-size:40px;line-height:1.05;color:var(--fg);background:transparent;border:0;border-radius:14px;padding:2px 8px;margin-left:-8px;text-overflow:ellipsis}
+.title-edit:hover{background:color-mix(in srgb,var(--raised) 70%,transparent)}
+.title-edit:focus{outline:none;background:var(--raised);box-shadow:0 0 0 1.5px var(--brand)}
+.title-edit::placeholder{color:var(--fg);opacity:.85}
+.drawer-b>.actions:last-child{position:sticky;bottom:-28px;margin:0 -24px -28px;padding:14px 24px calc(14px + env(safe-area-inset-bottom,0px));background:color-mix(in srgb,var(--block) 90%,transparent);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);border-top:1px solid var(--line-soft);z-index:3}
 </style>
 
 <div class="app">
@@ -671,7 +678,7 @@ const S={contacts:[],projets:[],comptes:[],opps:[],obj:{},view:"today",filters:{
 const esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
 const norm=s=>(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/\(exemple\)/g,"").replace(/[^a-z0-9]+/g," ").trim();
 const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
-function toast(t,cls=""){const el=document.createElement("div");el.className="toast "+cls;el.textContent=t;document.body.appendChild(el);setTimeout(()=>el.remove(),2600)}
+function toast(t,cls=""){document.querySelectorAll(".toast").forEach(x=>x.remove());const el=document.createElement("div");el.className="toast "+cls;el.textContent=t;document.body.appendChild(el);setTimeout(()=>el.remove(),2600)}
 function setSync(on,txt){const s=document.getElementById("sync");s.classList.toggle("on",on);s.querySelector("span").textContent=txt}
 async function save(col,id,patch,full){
   if(!S.db){toast("Enregistrement impossible : la base n'est pas joignable.");return false}
@@ -1289,7 +1296,7 @@ function drawerContact(c){
   const g=gcal(c.next&&c.next.label,c.next&&c.next.date,cname(c),[c.poste,compteName(c),c.email,c.linkedin,tipFor(c),zoneHint(c)].filter(Boolean).join("\n"));
   const evBtn=(e,l,col)=>`<button class="btn sm" data-cev="${e}" data-id="${c.id}"><i class="dot" style="--c:var(${col})"></i>${l}</button>`;
   return`<div class="scrim" data-close></div><aside class="drawer" role="dialog" aria-label="Fiche contact">
-  <div class="drawer-h"><div><h2>${esc(cname(c))}</h2>
+  <div class="drawer-h"><div style="flex:1;min-width:0"><input class="title-edit" id="c-nom" value="${esc(c.nom||"")}" placeholder="${esc(cname(c))}" aria-label="Nom du contact" title="Cliquez pour modifier">
     <div class="sub">${esc(c.poste||"Poste à préciser")}${acc?` chez <button class="lnk" data-openc="${esc(acc.id)}">${esc(acc.nom)}</button>`:""}</div>
     <div class="sub">${ctag(c)}${heatDots(chaleur(c))}${TYPES[c.type]?`<span class="pill">${TYPES[c.type]}</span>`:""}${SOURCES[c.source]?`<span class="pill">${SOURCES[c.source]}</span>`:""}${c.exemple?'<span style="color:var(--faint)">exemple</span>':""}</div></div>
     <button class="round" data-close aria-label="Fermer">×</button></div>
@@ -1309,7 +1316,6 @@ function drawerContact(c){
       ${acc.conv.length>1?`<div class="alert" style="margin-bottom:8px">${acc.conv.length} conversations en cours dans cette entreprise${acc.principal?` · contact principal : ${esc(acc.principal.nom||"")}`:""}.</div>`:""}
       <div class="sibs">${sibs.map(s=>`<div class="sib" data-open="${s.id}">${avC(s,"sm")}<div class="grow"><b>${esc(cname(s))}</b> <span class="muted">${esc(s.poste||"")}</span></div>${acc.principal&&acc.principal.id===s.id?'<span class="pill">Principal</span>':""}${ctag(s)}</div>`).join("")||`<div class="muted" style="font-size:12.5px">Seul contact de cet account.</div>`}</div></div>`:""}
     <div class="form">
-      <label class="field"><span class="label">Nom</span><input id="c-nom" value="${esc(c.nom)}"></label>
       <label class="field"><span class="label">Poste</span><input id="c-poste" value="${esc(c.poste)}"></label>
       <label class="field full"><span class="label">Entreprise liée</span><input id="c-studio" value="${esc(compteName(c))}" list="dl-comptes2" autocomplete="off"><datalist id="dl-comptes2">${accounts().map(a=>`<option value="${esc(a.nom)}"></option>`).join("")}</datalist><div class="hint" id="c-studio-hint">${studioHint(compteName(c),c.id)}</div></label>
       <label class="field"><span class="label">Type</span><select id="c-type">${opt(TYPES,c.type,"—")}</select></label>
@@ -1331,7 +1337,7 @@ function drawerContact(c){
 function drawerCompte(a){
   const cs=a.contacts.slice().sort((x,y)=>(chaleur(y)==="chaud")-(chaleur(x)==="chaud"));
   return`<div class="scrim" data-close></div><aside class="drawer" role="dialog" aria-label="Account">
-  <div class="drawer-h"><div><h2>${esc(a.nom)}</h2><div class="sub">${esc([ACC_TYPES[a.type],a.pays].filter(Boolean).join(" · ")||"Type et pays à préciser")}${stag(a.statut)}</div></div>
+  <div class="drawer-h"><div style="flex:1;min-width:0"><input class="title-edit" id="a-nom" value="${esc(a.nom)}" aria-label="Nom de l'entreprise" title="Cliquez pour modifier"><div class="sub">${esc([ACC_TYPES[a.type],a.pays].filter(Boolean).join(" · ")||"Type et pays à préciser")}${stag(a.statut)}</div></div>
     <button class="round" data-close aria-label="Fermer">×</button></div>
   <div class="drawer-b">
     <div class="facts"><div><span class="label">Dernier mouvement</span><b>${a.lastMove?ago(a.lastMove.d):"—"}</b></div>
@@ -1349,7 +1355,6 @@ function drawerCompte(a){
         <div class="st">${ctag(c)}${heatDots(chaleur(c))}<small>Dernier échange : ${lc?ago(lc.d).toLowerCase():"—"}</small></div>
         <button class="star ${a.principal&&a.principal.id===c.id?"on":""}" data-principal="${c.id}" title="Contact principal" aria-label="Contact principal">★</button></div>`}).join("")||`<div class="muted">Aucun contact rattaché.</div>`}</div></div>
     <div class="form">
-      <label class="field full"><span class="label">Nom de l'entreprise</span><input id="a-nom" value="${esc(a.nom)}"></label>
       <label class="field"><span class="label">Type de compte</span><select id="a-type">${opt(ACC_TYPES,a.type,"—")}</select></label>
       <label class="field"><span class="label">Pays / marché</span><input id="a-pays" value="${esc(a.pays)}"></label>
       <label class="field full"><span class="label">Notes stratégiques sur l'organisation</span><textarea id="a-notes" placeholder="Qui décide, comment ils travaillent, relations internes…">${esc(a.notes)}</textarea></label>
@@ -1364,7 +1369,7 @@ function drawerOpp(o){
   const evBtn=(e,l,col)=>`<button class="btn sm" data-oev="${e}" data-id="${o.id}"><i class="dot" style="--c:var(${col})"></i>${l}</button>`;
   const g=gcal(o.next&&o.next.label,o.next&&o.next.date,o.nom,c?[c.nom,c.email].filter(Boolean).join("\n"):"");
   return`<div class="scrim" data-close></div><aside class="drawer" role="dialog" aria-label="Opportunité">
-  <div class="drawer-h"><div><h2>${esc(o.nom)}</h2>
+  <div class="drawer-h"><div style="flex:1;min-width:0"><input class="title-edit" id="o-nom" value="${esc(o.nom)}" aria-label="Nom de l'opportunité" title="Cliquez pour modifier">
     <div class="sub">${acc?`<button class="lnk" data-openc="${esc(acc.id)}">${esc(acc.nom)}</button>`:"Account à définir"}${c?` · <button class="lnk" data-open="${c.id}">${esc(cname(c))}</button>`:""}</div>
     <div class="sub">${otag(o)}${o.categorie?`<span class="pill">${CATS[o.categorie]}</span>`:""}${MISSIONS[o.mission]?`<span class="pill">${MISSIONS[o.mission]}</span>`:""}${o.exemple?'<span style="color:var(--faint)">exemple</span>':""}</div></div>
     <button class="round" data-close aria-label="Fermer">×</button></div>
@@ -1380,7 +1385,6 @@ function drawerOpp(o){
       ${g?`<a class="btn sm" href="${g}" target="_blank" rel="noopener" style="align-self:flex-start">Ajouter à Google Agenda</a>`:""}</div>
     <div><p class="label" style="margin:0 0 8px">Étape du pipe</p><div class="steps">${evBtn("qualification","Qualification","--c-qualif")}${evBtn("r1","Call R1","--c-call")}${evBtn("proposition","Proposition envoyée","--c-call")}${evBtn("attente","Attente décision","--c-attente")}${evBtn("nego","Négociation","--c-nego")}${evBtn("signe","Signé","--c-signe")}${evBtn("perdu","Perdu · plus tard","--c-perdu")}</div></div>
     <div class="form">
-      <label class="field full"><span class="label">Nom de l'opportunité</span><input id="o-nom" value="${esc(o.nom)}"></label>
       <label class="field"><span class="label">Contact principal</span><select id="o-contact">${contactOptions(acc,o.contactId)}</select></label>
       <label class="field"><span class="label">Type de mission</span><select id="o-mission">${opt(MISSIONS,o.mission,"—")}</select></label>
       <label class="field"><span class="label">Valeur potentielle (€)</span><input id="o-valeur" type="number" min="0" step="100" value="${o.valeur||""}"></label>
@@ -1427,13 +1431,13 @@ function renderLayer(){
   if(!st){L.innerHTML="";L.dataset.k="";return}
   let html="",key="";
   if(st.t==="quick"){key="q"+st.kind;if(L.dataset.k===key)return;html=drawerQuick(st.kind,st.d||{})}
-  else if(st.t==="contact"){const c=S.contacts.find(x=>x.id===st.id);if(!c){S.L=null;return renderLayer()}key="c"+c.id+(c.maj||"")+(c.hist||[]).length+c.stage+(c.compteId||"")+oppsOf(c).map(o=>o.stage+o.maj).join();if(L.dataset.k===key)return;html=drawerContact(c)}
-  else if(st.t==="compte"){const a=accounts().find(x=>x.id===st.id);if(!a){S.L=null;return renderLayer()}key="a"+a.id+JSON.stringify(a.doc||{}).length+a.contacts.map(c=>c.id+c.stage+(c.maj||"")).join()+a.opps.map(o=>o.id+o.stage+(o.maj||"")).join();if(L.dataset.k===key)return;html=drawerCompte(a)}
-  else if(st.t==="opp"){const o=S.opps.find(x=>x.id===st.id);if(!o){S.L=null;return renderLayer()}key="o"+o.id+(o.maj||"")+(o.hist||[]).length+o.stage+(o.nego?1:0)+JSON.stringify(o).length;if(L.dataset.k===key)return;html=drawerOpp(o)}
-  else if(st.t==="projet"){const p=st.id==="new"?st.d:S.projets.find(x=>x.id===st.id);if(!p){S.L=null;return renderLayer()}key="p"+st.id;if(L.dataset.k===key)return;html=drawerProjet(p,st.id==="new")}
+  else if(st.t==="contact"){const c=S.contacts.find(x=>x.id===st.id);if(!c){if(Date.now()-(st.at||0)<6000){if(!L.dataset.k.startsWith("wait")){L.innerHTML="";L.dataset.k="wait"}return}S.L=null;return renderLayer()}key="c"+c.id+(c.maj||"")+(c.hist||[]).length+c.stage+(c.compteId||"")+oppsOf(c).map(o=>o.stage+o.maj).join();if(L.dataset.k===key)return;html=drawerContact(c)}
+  else if(st.t==="compte"){const a=accounts().find(x=>x.id===st.id);if(!a){if(Date.now()-(st.at||0)<6000){if(!L.dataset.k.startsWith("wait")){L.innerHTML="";L.dataset.k="wait"}return}S.L=null;return renderLayer()}key="a"+a.id+JSON.stringify(a.doc||{}).length+a.contacts.map(c=>c.id+c.stage+(c.maj||"")).join()+a.opps.map(o=>o.id+o.stage+(o.maj||"")).join();if(L.dataset.k===key)return;html=drawerCompte(a)}
+  else if(st.t==="opp"){const o=S.opps.find(x=>x.id===st.id);if(!o){if(Date.now()-(st.at||0)<6000){if(!L.dataset.k.startsWith("wait")){L.innerHTML="";L.dataset.k="wait"}return}S.L=null;return renderLayer()}key="o"+o.id+(o.maj||"")+(o.hist||[]).length+o.stage+(o.nego?1:0)+JSON.stringify(o).length;if(L.dataset.k===key)return;html=drawerOpp(o)}
+  else if(st.t==="projet"){const p=st.id==="new"?st.d:S.projets.find(x=>x.id===st.id);if(!p){if(Date.now()-(st.at||0)<6000){if(!L.dataset.k.startsWith("wait")){L.innerHTML="";L.dataset.k="wait"}return}S.L=null;return renderLayer()}key="p"+st.id;if(L.dataset.k===key)return;html=drawerProjet(p,st.id==="new")}
   L.innerHTML=html;L.dataset.k=key;
 }
-const open=(t,id,extra={})=>{S.L={t,id,...extra};document.getElementById("layer").dataset.k="";renderLayer()};
+const open=(t,id,extra={})=>{S.L={t,id,at:Date.now(),...extra};document.getElementById("layer").dataset.k="";renderLayer()};
 const closeLayer=()=>{S.L=null;renderLayer()};
 
 /* ───────── Interactions ───────── */
@@ -1620,7 +1624,7 @@ async function migrateLegacy(){
     if(id){await save("contacts",c.id,{stage:"pipeline",compteId:cid||"",next:null});n++}}
   toast(n+" opportunité(s) créée(s)");
 }
-document.addEventListener("keydown",e=>{if(e.key==="Escape"&&S.L)closeLayer()});
+document.addEventListener("keydown",e=>{if(e.key==="Enter"&&e.target.classList&&e.target.classList.contains("title-edit")){e.preventDefault();const b=document.querySelector('.drawer [data-act^="save-"]');if(b)b.click();return}if(e.key==="Escape"&&S.L)closeLayer()});
 document.addEventListener("input",e=>{
   const id=e.target.id;
   if(id&&id.startsWith("f-")){S.filters[id.slice(2)]=e.target.value;const pos=e.target.selectionStart;render();const el=document.getElementById(id);if(el){el.focus();if(id==="f-q"&&pos!=null)el.setSelectionRange(pos,pos)}}
