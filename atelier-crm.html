@@ -484,6 +484,13 @@ body.locked .app,body.locked #layer{visibility:hidden}
 .tier-quick span{font-size:11px;color:var(--faint);text-transform:uppercase;letter-spacing:.05em;margin-right:2px}
 .tier-quick button{border:1px solid var(--line);background:none;border-radius:999px;padding:2px 9px;font-size:11px;color:var(--muted)}
 .tier-quick button:hover{background:var(--t);border-color:transparent;color:var(--brand-ink)}
+
+.heat-pick{display:inline-flex;align-items:center;gap:7px;font-size:12px;color:var(--muted)}
+.heat-pick>span{display:inline-flex;gap:3px;padding:3px 5px;border:1px solid var(--line);border-radius:999px;background:var(--raised)}
+.heat-pick button[data-heat]:not(.lnk){width:14px;height:14px;border-radius:50%;border:0;padding:0;background:var(--line);cursor:pointer;transition:transform .12s}
+.heat-pick button[data-heat]:not(.lnk):hover{transform:scale(1.2)}
+.heat-pick button[data-heat].on{background:var(--brand)}
+.heat-pick em{font-style:normal}
 </style>
 
 <div class="app">
@@ -838,6 +845,10 @@ const initials=s=>(s||"?").replace(/\(.*?\)/g,"").split(/[\s\-]+/).filter(w=>/\p
 const cname=c=>c.nom||(c.studio?c.studio+" · contact à nommer":"Contact à nommer");
 const avC=(c,cls="")=>`<span class="av ${cls} ${cboard(c)==="prospect"&&cLate(c)?"is-late":""}" style="--c:var(${ccolor(c)})" title="${esc(cname(c))}">${esc(initials(cname(c)))}</span>`;
 const avO=(o,cls="")=>{const c=oContact(o);return`<span class="av ${cls} ${oLate(o)?"is-late":""}" style="--c:var(${ocolor(o)})">${esc(initials(c?cname(c):o.nom))}</span>`};
+/* Points de chaleur cliquables en haut de la fiche contact */
+const heatPick=c=>{const v=chaleur(c),n={froid:1,tiede:2,chaud:3,dormant:0}[v]||0;
+  return`<span class="heat-pick" role="group" aria-label="Chaleur du contact"><span>${["froid","tiede","chaud"].map((k,i)=>`<button type="button" data-heat="${k}" data-id="${c.id}" class="${i<n?"on":""}" title="${CHALEURS[k]}" aria-label="${CHALEURS[k]}" aria-pressed="${v===k}"></button>`).join("")}</span>
+    <em>${CHALEURS[v]||"—"}${c.chaleur?"":" · auto"}</em>${c.chaleur?`<button type="button" class="lnk" data-heat="" data-id="${c.id}">remettre en auto</button>`:""}</span>`};
 const heatDots=v=>{const n={froid:1,tiede:2,chaud:3,dormant:0}[v]||0;return`<span class="temp"><span>${[1,2,3].map(i=>`<i class="${i<=n?"on":""}"></i>`).join("")}</span>${CHALEURS[v]||"—"}</span>`};
 const opt=(obj,v,empty)=>(empty!==undefined?`<option value="">${empty}</option>`:"")+Object.entries(obj).map(([k,l])=>`<option value="${k}" ${v===k?"selected":""}>${esc(l)}</option>`).join("");
 const head=(t,sub,acts="")=>`<div class="head"><div><h1>${t}</h1>${sub?`<p>${sub}</p>`:""}</div><div class="actions">${acts}</div></div>`;
@@ -1460,7 +1471,7 @@ function drawerContact(c){
   return`<div class="scrim" data-close></div><aside class="drawer" role="dialog" aria-label="Fiche contact">
   <div class="drawer-h"><div style="flex:1;min-width:0"><input class="title-edit" id="c-nom" value="${esc(c.nom||"")}" placeholder="Nom du contact à compléter" aria-label="Nom du contact" title="Cliquez pour modifier">
     <div class="sub">${esc(c.poste||"Poste à préciser")}${acc?` chez <button class="lnk" data-openc="${esc(acc.id)}">${esc(acc.nom)}</button>`:""}</div>
-    <div class="sub">${ctag(c)}${heatDots(chaleur(c))}${TYPES[c.type]?`<span class="pill">${TYPES[c.type]}</span>`:""}${SOURCES[c.source]?`<span class="pill">${SOURCES[c.source]}</span>`:""}${c.exemple?'<span style="color:var(--faint)">exemple</span>':""}</div></div>
+    <div class="sub">${ctag(c)}${heatPick(c)}${TYPES[c.type]?`<span class="pill">${TYPES[c.type]}</span>`:""}${SOURCES[c.source]?`<span class="pill">${SOURCES[c.source]}</span>`:""}${c.exemple?'<span style="color:var(--faint)">exemple</span>':""}</div></div>
     <button class="round" data-close aria-label="Fermer">×</button></div>
   <div class="drawer-b">
     ${pros?`<div><p class="label" style="margin:0 0 8px">Niveau d'activation</p><div class="seg-f" role="group" aria-label="Niveau d'activation">${Object.entries(ACT).map(([k,a])=>`<button data-setact="${k}" data-id="${c.id}" aria-pressed="${actv(c)===k}">${a.l}</button>`).join("")}</div></div>`:""}
@@ -1714,7 +1725,7 @@ function renderLayer(){
   if(!st){L.innerHTML="";L.dataset.k="";return}
   let html="",key="";
   if(st.t==="quick"){key="q"+st.kind;if(L.dataset.k===key)return;html=drawerQuick(st.kind,st.d||{})}
-  else if(st.t==="contact"){const c=S.contacts.find(x=>x.id===st.id);if(!c){if(Date.now()-(st.at||0)<6000){if(!L.dataset.k.startsWith("wait")){L.innerHTML="";L.dataset.k="wait"}return}S.L=null;return renderLayer()}key="c"+c.id+(c.maj||"")+(c.hist||[]).length+c.stage+(c.compteId||"")+oppsOf(c).map(o=>o.stage+o.maj).join();if(L.dataset.k===key)return;html=drawerContact(c)}
+  else if(st.t==="contact"){const c=S.contacts.find(x=>x.id===st.id);if(!c){if(Date.now()-(st.at||0)<6000){if(!L.dataset.k.startsWith("wait")){L.innerHTML="";L.dataset.k="wait"}return}S.L=null;return renderLayer()}key="c"+c.id+(c.maj||"")+(c.hist||[]).length+c.stage+(c.compteId||"")+"|"+(c.chaleur||"")+(c.activation||"")+(c.tomSeg||"")+(c.next?c.next.date:"")+oppsOf(c).map(o=>o.stage+o.maj).join();if(L.dataset.k===key)return;html=drawerContact(c)}
   else if(st.t==="compte"){const a=accounts().find(x=>x.id===st.id);if(!a){if(Date.now()-(st.at||0)<6000){if(!L.dataset.k.startsWith("wait")){L.innerHTML="";L.dataset.k="wait"}return}S.L=null;return renderLayer()}key="a"+a.id+JSON.stringify(a.doc||{}).length+a.contacts.map(c=>c.id+c.stage+(c.maj||"")).join()+a.opps.map(o=>o.id+o.stage+(o.maj||"")).join();if(L.dataset.k===key)return;html=drawerCompte(a)}
   else if(st.t==="opp"){const o=S.opps.find(x=>x.id===st.id);if(!o){if(Date.now()-(st.at||0)<6000){if(!L.dataset.k.startsWith("wait")){L.innerHTML="";L.dataset.k="wait"}return}S.L=null;return renderLayer()}key="o"+o.id+(o.maj||"")+(o.hist||[]).length+o.stage+(o.nego?1:0)+JSON.stringify(o).length;if(L.dataset.k===key)return;html=drawerOpp(o)}
   else if(st.t==="projet"){const p=st.id==="new"?st.d:S.projets.find(x=>x.id===st.id);if(!p){if(Date.now()-(st.at||0)<6000){if(!L.dataset.k.startsWith("wait")){L.innerHTML="";L.dataset.k="wait"}return}S.L=null;return renderLayer()}key="p"+st.id;if(L.dataset.k===key)return;html=drawerProjet(p,st.id==="new")}
@@ -1742,6 +1753,10 @@ document.addEventListener("click",async e=>{
   const afg=t.closest("[data-afgroup]");if(afg){S.af.group=afg.dataset.afgroup;render();return}
   const sac=t.closest("[data-setacc]");if(sac){const[k,v]=sac.dataset.setacc.split(":");const ac=accounts().find(x=>x.id===sac.dataset.id);if(!ac)return;const id=await materialize(ac);if(!id)return;
     if(await save("comptes",id,{[k]:v}))toast((k==="cat"?"Catégorie : "+ACC_CAT[v]:GEO[v]));if(id!==ac.id)open("compte",id);return}
+  const ht=t.closest("[data-heat]");if(ht){const c=S.contacts.find(x=>x.id===ht.dataset.id);if(!c)return;let v=ht.dataset.heat;
+    if(v&&v==="froid"&&chaleur(c)==="froid"&&c.chaleur)v="dormant";
+    const sel=document.getElementById("c-chaleur");if(sel){sel.value=v;if(S.dirty)S.dirty["c-chaleur"]=v}
+    if(await save("contacts",c.id,{chaleur:v,maj:today()}))toast(v?"Chaleur : "+CHALEURS[v]:"Chaleur automatique");return}
   const tp=t.closest("[data-settier]");if(tp){const ac=accounts().find(x=>x.id===tp.dataset.id);if(!ac)return;const id=await materialize(ac);if(!id)return;
     const v=ac.tier===tp.dataset.settier?"":tp.dataset.settier;if(await save("comptes",id,{tier:v}))toast(v?"Priorité : "+TIERS[v].l:"Priorité retirée");if(id!==ac.id)open("compte",id);return}
   const sa=t.closest("[data-setact]");if(sa){await setActivation([sa.dataset.id],sa.dataset.setact);return}
