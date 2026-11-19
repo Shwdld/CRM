@@ -448,6 +448,33 @@ body.locked .app,body.locked #layer{visibility:hidden}
 .lock-card b{font-size:40px;line-height:1}
 .lock-card p{margin:0;color:var(--muted)}
 .lock-card input{background:var(--raised);border:1px solid var(--line);border-radius:999px;padding:10px 14px;font-size:14px}
+
+/* Accounts : priorités, sections */
+.tiers{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.tier{border:0;background:var(--raised);border-radius:20px;padding:14px;text-align:left;display:flex;flex-direction:column;gap:6px;min-width:0}
+.tier.on{box-shadow:0 0 0 2px var(--brand)}
+.tier-top{display:flex;align-items:center;gap:8px;font-size:12.5px;font-weight:500}
+.tier-top i{width:12px;height:12px;border-radius:4px;flex:none}
+.tier b{font-family:var(--f-title);font-weight:400;font-size:34px;line-height:1}
+.tier small{color:var(--muted);font-size:11.5px;line-height:1.35}
+.tier-pill{align-self:flex-start;font-size:11px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;padding:3px 10px;border-radius:999px;background:var(--t);color:var(--brand-ink)}
+.tier-pill.none{background:none;border:1px dashed var(--line);color:var(--faint);font-weight:500}
+.acc-sec{margin-top:26px}
+.acc-sec-h{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin:0 4px 12px}
+.acc-sec-h h2{margin:0;font-family:var(--f-title);font-weight:400;font-size:30px;line-height:1;display:flex;align-items:center;gap:10px}
+.acc-sec-h .dot{width:11px;height:11px}
+.acc-sec-h span{font-size:12.5px}
+/* Top of mind : catégories empilées */
+.tom-list{display:flex;flex-direction:column;gap:14px}
+.tom-sec{background:var(--block);border-radius:var(--r-block);padding:20px 20px 22px}
+.tom-sec.over,.tom-pipe.over{box-shadow:inset 0 0 0 2px var(--brand)}
+.tom-cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;--nbg:var(--block)}
+.tom-cards .pc{--nbg:var(--block)}
+.tom-empty{color:var(--faint);font-size:12.5px;border:1.5px dashed var(--line);border-radius:20px;padding:22px;text-align:center}
+.tom-pipe{display:flex;gap:12px;align-items:center;flex-wrap:wrap;border:1.5px dashed color-mix(in srgb,var(--c-qualif) 70%,transparent);background:color-mix(in srgb,var(--c-qualif) 10%,transparent);border-radius:20px;padding:14px 18px;margin-bottom:14px;font-size:13px}
+.tom-pipe span{color:var(--muted)}
+@media (max-width:1100px){.tiers{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:760px){.tiers{grid-template-columns:repeat(2,minmax(0,1fr))}}
 </style>
 
 <div class="app">
@@ -678,7 +705,33 @@ function compteKey(c){
 const compteName=c=>{const k=compteKey(c);return k&&IDX.byId[k]?IDX.byId[k].nom:(c.studio||"")};
 const oCompteName=o=>(IDX.byId[o.compteId]||{}).nom||o.compteNom||"";
 const oContact=o=>IDX.contact[o.contactId]||null;
+const TIERS={core:{l:"Core",d:"Fit créatif, potentiel, désirabilité, reconnaissance",m:100},strong:{l:"Strong",d:"Bons comptes, un peu moins désirables",m:68},opp:{l:"Opportunistic",d:"À saisir si l'occasion se présente",m:42},low:{l:"Low priority",d:"Fit plus faible, au cas où",m:22}};
+const tierColor=k=>TIERS[k]?`color-mix(in srgb,var(--brand) ${TIERS[k].m}%,var(--raised))`:"var(--line)";
+const ACC_CAT={da:"Studios & agences · DA",graph:"Studios & agences · Design graphique",apporteur:"Apporteurs d'affaires",marque:"Marques · en direct"};
+const GEO={fr:"France",intl:"Étranger"};
+const MAT=[["jamais","Jamais contacté"],["contacte","Contacté"],["relance","Relancé · en pause"],["echange","Échange · Top of mind"],["besoin","Besoin évoqué"],["r1","R1"],["attente","En attente · négo"],["client","Client"]];
 const ACC_STATUS={pipeline:{l:"Pipeline",c:"--c-qualif"},tom:{l:"Top of mind",c:"--c-conv"},prospection:{l:"Prospection",c:"--c-contact"},dormant:{l:"Dormant",c:"--c-sommeil"}};
+function accCat(d,cs){
+  if(ACC_CAT[d.cat])return d.cat;
+  if(d.type==="marque")return"marque";
+  if(d.type==="partenaire"||cs.some(c=>c.type==="apporteur"))return"apporteur";
+  const n=cs.map(c=>norm(c.note||c.notes)).join(" ")+" "+norm(d.notes);
+  if(/\bda\b|direction artistique/.test(n))return"da";
+  if(/graph/.test(n))return"graph";
+  if(cs.some(c=>c.type==="client_final"))return"marque";
+  return"";
+}
+function accGeo(d,cs){
+  if(GEO[d.geo])return d.geo;
+  if(d.pays)return guessZone(d.pays)==="fr"?"fr":"intl";
+  return cs.some(c=>c.zone&&c.zone!=="fr")?"intl":"fr";
+}
+function accMat(cs,os){
+  let m=0;const up=k=>{const i=MAT.findIndex(x=>x[0]===k);if(i>m)m=i};
+  cs.forEach(c=>{const s=cstage(c);if(s==="contacte")up("contacte");if(["relance","sommeil","reactiver"].includes(s))up("relance");if(s==="tom")up("echange")});
+  os.forEach(o=>{const s=ostage(o);if(s==="repondu")up("besoin");if(s==="r1")up("r1");if(s==="attente")up("attente");if(s==="signe")up("client");if(s==="perdu")up("besoin")});
+  return MAT[m][0];
+}
 function accounts(){
   const map={};
   S.comptes.forEach(a=>{map[a.id]={id:a.id,doc:a,nom:a.nom,contacts:[],opps:[]}});
@@ -703,14 +756,15 @@ function accounts(){
     const principal=cs.find(c=>c.id===d.principal)||null;
     const conv=cs.filter(c=>["contacte","relance"].includes(cstage(c))||open.some(o=>o.contactId===c.id));
     return{...a,statut,ancien,accHeat,lastMove:moves[0]||null,next,principal,conv,open,valeur:open.reduce((t,o)=>t+(+o.valeur||0),0),pond:open.reduce((t,o)=>t+pondere(o),0),
-      type:d.type||"",pays:d.pays||"",notes:d.notes||""};
+      type:d.type||"",pays:d.pays||"",notes:d.notes||"",tier:TIERS[d.tier]?d.tier:"",cat:accCat(d,cs),geo:accGeo(d,cs),mat:accMat(cs,os),
+      perduRep:os.some(o=>ostage(o)==="perdu")||cs.some(c=>zoneOf(c)==="tom"&&tomSeg(c)==="reporte"),attente:os.some(o=>ostage(o)==="attente")};
   });
 }
 const siblings=c=>{const k=compteKey(c);return k?S.contacts.filter(x=>x.id!==c.id&&compteKey(x)===k):[]};
 
 /* ───────── État & stockage ───────── */
 const S={contacts:[],projets:[],comptes:[],opps:[],obj:{},view:"today",filters:{q:"",type:"",source:"",board:"",chaleur:"",act:""},sort:{k:"next",dir:1},
-  params:{},backups:[],sec:{},bk:{busy:"",confirm:""},home:{weeks:2,editGoals:false,showAll:false},sel:new Set(),fill:false,fc:{period:"mois",edit:false},ready:false,db:null,L:null};
+  af:{group:"cat"},params:{},backups:[],sec:{},bk:{busy:"",confirm:""},home:{weeks:2,editGoals:false,showAll:false},sel:new Set(),fill:false,fc:{period:"mois",edit:false},ready:false,db:null,L:null};
 const esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
 const norm=s=>(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/\(exemple\)/g,"").replace(/[^a-z0-9]+/g," ").trim();
 const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
@@ -995,13 +1049,15 @@ function vTom(){
   const q=S.filters.q.trim().toLowerCase();
   const list=S.contacts.filter(isTom).filter(c=>!q||[c.nom,c.studio,compteName(c),c.note].join(" ").toLowerCase().includes(q));
   const due=list.filter(c=>c.next&&c.next.date&&c.next.date<=today()).length,none=list.filter(c=>!c.next||!c.next.date).length;
-  const cols=TOM.map(sg=>{const cs=list.filter(c=>tomSeg(c)===sg.k).sort((a,b)=>((a.next&&a.next.date)||"9").localeCompare((b.next&&b.next.date)||"9"));
-    return`<div class="col folder" data-tomdrop="${sg.k}">${colHead({l:sg.l,c:sg.c,d:sg.d+" · rappel par défaut tous les "+(sg.cad<45?Math.round(sg.cad/7)+" sem.":String(Math.round(sg.cad/30*10)/10).replace(".",",")+" mois")},cs.length)}${cs.map(pcardC).join("")}</div>`}).join("");
-  const toPipe=`<div class="col archive folder" data-tomdrop="pipe">${colHead({l:"Besoin concret → Pipeline",c:"--c-qualif",d:"Glissez une carte ici quand un projet réel apparaît : vous créez son opportunité."},"")}</div>`;
+  const secs=TOM.map(sg=>{const cs=list.filter(c=>tomSeg(c)===sg.k).sort((a,b)=>((a.next&&a.next.date)||"9").localeCompare((b.next&&b.next.date)||"9"));
+    const rythme=sg.cad<45?Math.round(sg.cad/7)+" semaines":String(Math.round(sg.cad/30*10)/10).replace(".",",")+" mois";
+    return`<section class="tom-sec" data-tomdrop="${sg.k}"><div class="acc-sec-h"><h2><i class="dot" style="--c:var(${sg.c})"></i>${sg.l}</h2><span class="muted">${cs.length} · ${sg.d} · rappel tous les ${rythme}</span></div>
+      <div class="tom-cards">${cs.map(pcardC).join("")||`<div class="tom-empty">Glissez une carte ici pour la classer dans « ${sg.l} ».</div>`}</div></section>`}).join("");
   return head("Top <em>of mind</em>","Les personnes qui vous connaissent, sans besoin ouvert. L'objectif : rester présente dans leur esprit.",`<button class="btn primary" data-act="new-contact">+ Contact</button>`)
    +activeFilterNote()+`<div class="qsum" style="margin-bottom:14px"><span><b>${list.length}</b> relations</span><span class="${due?"late":""}"><b>${due}</b> rappel${due>1?"s":""} dû${due>1?"s":""}</span>${none?`<span><b>${none}</b> sans rappel programmé</span>`:""}</div>`
    +`<div class="toolbar"><input type="search" id="f-q" placeholder="Rechercher une personne, une entreprise…" value="${esc(S.filters.q)}"></div>`
-   +`<div class="board-wrap"><div class="board">${cols}${toPipe}</div></div>`;
+   +`<div class="tom-pipe" data-tomdrop="pipe"><b>Besoin concret → Pipeline</b><span>Glissez une carte ici quand un projet réel apparaît : vous créez son opportunité.</span></div>`
+   +`<div class="tom-list">${secs}</div>`;
 }
 
 /* ───────── PIPELINE (opportunités) ───────── */
@@ -1036,19 +1092,44 @@ function pcardO(o){
 
 /* ───────── ACCOUNTS ───────── */
 function vComptes(){
-  const q=S.filters.q.trim().toLowerCase();
-  const order={pipeline:0,tom:1,prospection:2,dormant:3};
-  const list=accounts().filter(a=>a.contacts.length||a.doc).filter(a=>!q||[a.nom,a.pays,...a.contacts.map(c=>c.nom)].join(" ").toLowerCase().includes(q))
-    .sort((a,b)=>order[a.statut]-order[b.statut]||b.valeur-a.valeur);
-  const multi=list.filter(a=>a.conv.length>1).length;
-  return head("Accounts",`${list.length} entreprises${multi?` · <span class="late">${multi} avec plusieurs conversations en parallèle</span>`:""}`,`<button class="btn primary" data-act="new-compte">+ Account</button>`)
-   +activeFilterNote()+`<div class="toolbar"><input type="search" id="f-q" placeholder="Rechercher une entreprise, un contact…" value="${esc(S.filters.q)}"></div>`
-   +(list.length?`<div class="accts">${list.map(acctCard).join("")}</div>`:`<div class="block"><div class="empty">Aucun account. Ils se créent automatiquement quand vous renseignez l'entreprise d'un contact.</div></div>`);
+  const q=S.filters.q.trim().toLowerCase(),F=S.af;
+  const all=accounts().filter(a=>a.contacts.length||a.doc);
+  const list=all.filter(a=>(!q||[a.nom,a.pays,...a.contacts.map(c=>c.nom)].join(" ").toLowerCase().includes(q))
+    &&(!F.zone||a.statut===F.zone)&&(!F.heat||a.accHeat===F.heat)&&(!F.mat||a.mat===F.mat)&&(!F.tier||(F.tier==="none"?!a.tier:a.tier===F.tier))
+    &&(!F.cat||(F.cat==="none"?!a.cat:a.cat===F.cat))&&(!F.geo||a.geo===F.geo)&&(!F.ancien||a.ancien)&&(!F.perdu||a.perduRep)&&(!F.attente||a.attente));
+  const tierOrder={core:0,strong:1,opp:2,low:3,"":4},zoneOrder={pipeline:0,tom:1,prospection:2,dormant:3};
+  list.sort((x,y)=>tierOrder[x.tier]-tierOrder[y.tier]||zoneOrder[x.statut]-zoneOrder[y.statut]||y.valeur-x.valeur||x.nom.localeCompare(y.nom));
+  /* compteur des priorités (sur tous les accounts) */
+  const tot=all.length||1,tc=k=>all.filter(a=>a.tier===k).length,none=all.filter(a=>!a.tier).length;
+  const counter=`<section class="block folder" style="margin-bottom:46px;--tab-w:26%"><div class="b-h"><div><h2>Priorités</h2><p>Répartition de vos ${all.length} accounts · cliquez pour filtrer</p></div></div>
+    <div class="stack" style="height:12px">${Object.keys(TIERS).map(k=>`<i style="background:${tierColor(k)};flex:${tc(k)}"></i>`).join("")}<i style="background:var(--line-soft);flex:${none}"></i></div>
+    <div class="tiers">${Object.entries(TIERS).map(([k,t])=>`<button class="tier ${F.tier===k?"on":""}" data-af="tier:${k}"><span class="tier-top"><i style="background:${tierColor(k)}"></i>${t.l}</span><b>${Math.round(tc(k)/tot*100)} %</b><small>${tc(k)} account${tc(k)>1?"s":""} · ${t.d}</small></button>`).join("")}
+      <button class="tier ${F.tier==="none"?"on":""}" data-af="tier:none"><span class="tier-top"><i style="background:var(--line)"></i>À classer</span><b>${Math.round(none/tot*100)} %</b><small>${none} sans priorité</small></button></div></section>`;
+  const sel=(k,l,o)=>`<select data-afsel="${k}" aria-label="${l}"><option value="">${l}</option>${Object.entries(o).map(([v,t])=>`<option value="${v}" ${F[k]===v?"selected":""}>${esc(t)}</option>`).join("")}</select>`;
+  const tog=(k,l)=>`<button class="pill" data-af="${k}:1" aria-pressed="${!!F[k]}">${l}</button>`;
+  const anyF=["zone","heat","mat","tier","cat","geo","ancien","perdu","attente"].some(k=>F[k]);
+  const filters=`<div class="toolbar"><input type="search" id="f-q" placeholder="Rechercher une entreprise, un contact…" value="${esc(S.filters.q)}">
+      ${sel("zone","Toutes les zones",{prospection:"Prospection",tom:"Top of mind",pipeline:"Pipeline",dormant:"Dormant"})}
+      ${sel("heat","Toutes températures",{chaud:"Chaud",tiede:"Tiède",froid:"Froid",dormant:"Dormant"})}
+      ${sel("mat","Toutes maturités",Object.fromEntries(MAT))}
+      ${sel("cat","Toutes catégories",{...ACC_CAT,none:"À classer"})}
+      ${sel("geo","France & étranger",GEO)}</div>
+    <div class="tags"><span class="label">Afficher</span>${tog("ancien","Anciens clients")}${tog("perdu","Perdu · reporté")}${tog("attente","En attente")}${anyF?`<button class="btn sm ghost" data-act="af-reset">Réinitialiser les filtres</button>`:""}
+      <span style="flex:1"></span><span class="label">Regrouper par</span><div class="seg-f" role="group" aria-label="Regrouper par">${[["cat","Catégorie"],["tier","Priorité"],["geo","Pays"],["zone","Zone"]].map(([k,l])=>`<button data-afgroup="${k}" aria-pressed="${F.group===k}">${l}</button>`).join("")}</div></div>`;
+  const G={cat:{key:a=>a.cat||"none",order:[...Object.keys(ACC_CAT),"none"],label:k=>ACC_CAT[k]||"Catégorie à classer"},
+    tier:{key:a=>a.tier||"none",order:[...Object.keys(TIERS),"none"],label:k=>TIERS[k]?TIERS[k].l:"Priorité à définir"},
+    geo:{key:a=>a.geo,order:["fr","intl"],label:k=>GEO[k]},
+    zone:{key:a=>a.statut,order:["pipeline","tom","prospection","dormant"],label:k=>ACC_STATUS[k].l}}[F.group]||null;
+  const sections=G.order.map(k=>{const items=list.filter(a=>G.key(a)===k);if(!items.length)return"";
+    return`<section class="acc-sec"><div class="acc-sec-h"><h2>${esc(G.label(k))}</h2><span class="muted">${items.length} · ${Math.round(items.length/Math.max(1,list.length)*100)} %</span></div><div class="accts">${items.map(acctCard).join("")}</div></section>`}).join("");
+  return head("Accounts",`${list.length} sur ${all.length} entreprises`,`<button class="btn primary" data-act="new-compte">+ Account</button>`)
+   +counter+filters+(list.length?sections:`<div class="block"><div class="empty">Aucun account ne correspond à ces filtres.</div></div>`);
 }
 function acctCard(a){
   return`<article class="acct notched" data-openc="${esc(a.id)}">${notch("Ouvrir l'account",`data-openc="${esc(a.id)}"`)}
+    ${a.tier?`<span class="tier-pill" style="--t:${tierColor(a.tier)}">${TIERS[a.tier].l}</span>`:`<span class="tier-pill none">Priorité à définir</span>`}
     <h3>${esc(a.nom)}</h3>
-    <div class="meta">${esc([ACC_TYPES[a.type],a.pays].filter(Boolean).join(" · ")||"Type et pays à préciser")}</div>
+    <div class="meta">${esc([ACC_CAT[a.cat]||"Catégorie à classer",GEO[a.geo]].join(" · "))}</div>
     <div class="row"><span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${stag(a.statut)}${a.ancien?`<span class="pill">Ancien client</span>`:""}${a.contacts.length?heatDots(a.accHeat):""}</span><span class="val">${a.valeur?keur(a.valeur):""}</span></div>
     <div class="row"><div class="avs">${a.contacts.slice(0,5).map(c=>avC(c,"sm")).join("")}</div><small class="muted">${plural(a.contacts.length,"contact")}${a.open.length?" · "+plural(a.open.length,"opportunité"):""}</small></div>
     <div class="row"><span class="muted">Dernier mouvement</span><span>${a.lastMove?ago(a.lastMove.d):"—"}</span></div>
@@ -1338,6 +1419,8 @@ function drawerQuick(kind,d){
     <label class="field"><span class="label">Source</span><select id="q-source">${opt(SOURCES,d.source||"outbound")}</select></label>
     <label class="field full"><span class="label">Activation</span><select id="q-act">${opt(Object.fromEntries(Object.entries(ACT).map(([k,a])=>[k,a.l])),weekUsed()<LIM.week&&boardAccounts().size<LIM.accounts?"semaine":"backlog")}</select></label>`;
   if(kind==="compte")body=`<label class="field full"><span class="label">Nom de l'entreprise</span><input id="q-nom" autofocus></label>
+    <label class="field"><span class="label">Catégorie</span><select id="q-acat">${opt(ACC_CAT,"da")}</select></label>
+    <label class="field"><span class="label">Priorité</span><select id="q-tier">${opt(Object.fromEntries(Object.entries(TIERS).map(([k,t])=>[k,t.l])),"","À définir")}</select></label>
     <label class="field"><span class="label">Type de compte</span><select id="q-atype">${opt(ACC_TYPES,"studio")}</select></label>
     <label class="field"><span class="label">Pays / marché</span><input id="q-pays"></label>`;
   if(kind==="opp"){const sel=d.compteId||"";const a=accs.find(x=>x.id===sel);
@@ -1431,6 +1514,9 @@ function drawerCompte(a){
         <div class="st">${ctag(c)}${heatDots(chaleur(c))}<small>Dernier échange : ${lc?ago(lc.d).toLowerCase():"—"}</small></div>
         <button class="star ${a.principal&&a.principal.id===c.id?"on":""}" data-principal="${c.id}" title="Contact principal" aria-label="Contact principal">★</button></div>`}).join("")||`<div class="muted">Aucun contact rattaché.</div>`}</div></div>
     <div class="form">
+      <div class="field full"><span class="label">Priorité</span><div class="seg-f" role="group" aria-label="Priorité">${Object.entries(TIERS).map(([k,t])=>`<button type="button" data-settier="${k}" data-id="${esc(a.id)}" aria-pressed="${a.tier===k}" title="${esc(t.d)}">${t.l}</button>`).join("")}</div></div>
+      <label class="field"><span class="label">Catégorie</span><select id="a-cat">${opt(ACC_CAT,a.doc&&a.doc.cat||"","Auto · "+(ACC_CAT[a.cat]||"à classer"))}</select></label>
+      <label class="field"><span class="label">France / étranger</span><select id="a-geo">${opt(GEO,a.doc&&a.doc.geo||"","Auto · "+GEO[a.geo])}</select></label>
       <label class="field"><span class="label">Type de compte</span><select id="a-type">${opt(ACC_TYPES,a.type,"—")}</select></label>
       <label class="field"><span class="label">Pays / marché</span><input id="a-pays" value="${esc(a.pays)}"></label>
       <label class="field full"><span class="label">Notes stratégiques sur l'organisation</span><textarea id="a-notes" placeholder="Qui décide, comment ils travaillent, relations internes…">${esc(a.notes)}</textarea></label>
@@ -1638,6 +1724,10 @@ document.addEventListener("click",async e=>{
   const rm=t.closest("[data-remind]");if(rm){const c=S.contacts.find(x=>x.id===rm.dataset.id);if(!c)return;const f=await saveContact(true);if(f===null)return;
     await save("contacts",c.id,{next:{date:addDays(today(),+rm.dataset.remind),label:"Prendre des nouvelles"}});toast("Rappel programmé : "+rel(addDays(today(),+rm.dataset.remind)).toLowerCase());return}
   const dn=t.closest("[data-done-c]");if(dn){const o=S.opps.find(x=>x.contactId===dn.dataset.doneC&&ostage(x)==="signe"&&!projectDone(x));if(o){await projectFinished(o);closeLayer()}return}
+  const afb=t.closest("[data-af]");if(afb){const[k,v]=afb.dataset.af.split(":");S.af[k]=S.af[k]===v||(v==="1"&&S.af[k])?"":v;render();return}
+  const afg=t.closest("[data-afgroup]");if(afg){S.af.group=afg.dataset.afgroup;render();return}
+  const tp=t.closest("[data-settier]");if(tp){const ac=accounts().find(x=>x.id===tp.dataset.id);if(!ac)return;const id=await materialize(ac);if(!id)return;
+    const v=ac.tier===tp.dataset.settier?"":tp.dataset.settier;if(await save("comptes",id,{tier:v}))toast(v?"Priorité : "+TIERS[v].l:"Priorité retirée");if(id!==ac.id)open("compte",id);return}
   const sa=t.closest("[data-setact]");if(sa){await setActivation([sa.dataset.id],sa.dataset.setact);return}
   const bk=t.closest("[data-bulk]");if(bk){await setActivation([...S.sel],bk.dataset.bulk);return}
   const af=t.closest("[data-actfilter]");if(af){S.filters.act=af.dataset.actfilter;S._keepAct=true;go("contacts");return}
@@ -1692,6 +1782,7 @@ document.addEventListener("click",async e=>{
       const h=await sha(a1);try{await S.db.doc("reglages/securite").set({hash:h,maj:today()});ss.set("crm-unlocked",h);toast("Code d'accès activé");}catch(_){toast("Code non enregistré. Réessayez.")}break}
     case"sec-off":if(S.bk.secOff){try{await S.db.doc("reglages/securite").set({hash:"",maj:today()});ss.del("crm-unlocked");S.bk.secOff=false;toast("Code retiré")}catch(_){toast("Échec. Réessayez.")}}else{S.bk.secOff=true;render()}break;
     case"clear-filters":clearFilters();render();break;
+    case"af-reset":S.af={group:S.af.group};render();break;
     case"toggle-all":S.home.showAll=!S.home.showAll;render();break;
     case"migrate":a.disabled=true;await migrateLegacy();break;
     case"do-import":a.disabled=true;await doImport();break;
@@ -1773,7 +1864,7 @@ async function quickSave(kind){
   if(kind==="compte"){
     const nom=val("q-nom").trim();if(!nom){toast("Donnez un nom à l'entreprise.");return}
     if(IDX.byName[norm(nom)]){toast("Cet account existe déjà");open("compte",IDX.byName[norm(nom)].id);return}
-    const id=uid();if(await save("comptes",id,{nom,type:val("q-atype"),pays:val("q-pays").trim(),cree:today()},true)){toast("Account créé");open("compte",id)}
+    const id=uid();if(await save("comptes",id,{nom,cat:val("q-acat"),tier:val("q-tier"),type:val("q-atype"),pays:val("q-pays").trim(),cree:today()},true)){toast("Account créé");open("compte",id)}
   }
   if(kind==="opp"){
     const nom=val("q-nom").trim();if(!nom){toast("Donnez un nom à l'opportunité.");return}
@@ -1806,7 +1897,7 @@ async function materialize(a){
 }
 async function saveCompte(){
   const a=accounts().find(x=>x.id===S.L.id);if(!a)return;
-  const body={nom:val("a-nom").trim(),type:val("a-type"),pays:val("a-pays").trim(),notes:val("a-notes"),nextLabel:val("a-nextlabel").trim(),nextDate:val("a-nextdate")};
+  const body={nom:val("a-nom").trim(),cat:val("a-cat"),geo:val("a-geo"),type:val("a-type"),pays:val("a-pays").trim(),notes:val("a-notes"),nextLabel:val("a-nextlabel").trim(),nextDate:val("a-nextdate")};
   if(!body.nom){toast("Donnez un nom à l'entreprise.");return}
   const id=await materialize(a);if(!id)return;
   if(await save("comptes",id,body)){if(norm(body.nom)!==norm(a.nom))for(const c of a.contacts)await save("contacts",c.id,{studio:body.nom,compteId:id});toast("Account enregistré");closeLayer()}
@@ -1856,6 +1947,7 @@ document.addEventListener("input",e=>{
   if(id==="i-paste"){clearTimeout(window._pt);window._pt=setTimeout(()=>{if(e.target.value.trim())fromPaste(e.target.value)},400)}
 });
 document.addEventListener("change",e=>{
+  if(e.target.dataset&&e.target.dataset.afsel){S.af[e.target.dataset.afsel]=e.target.value;render();return}
   if(e.target.id==="bk-hour"||e.target.id==="bk-auto"){const o={...S.params,backupHour:+val("bk-hour"),backupAuto:val("bk-auto")==="1"};S.params=o;render();if(S.db)S.db.doc("reglages/params").set(o).then(()=>{toast("Réglage enregistré");setTimeout(autoBackupTick,500)}).catch(()=>toast("Réglage non enregistré"));return}
   if(e.target.id&&e.target.closest&&e.target.closest("#layer .drawer")){S.dirty=S.dirty||{};S.dirty[e.target.id]=e.target.type==="checkbox"?e.target.checked:e.target.value}
   if(e.target.id==="sel-all"){const list=filteredC().filter(c=>!S.filters.act||actv(c)===S.filters.act);list.forEach(c=>e.target.checked?S.sel.add(c.id):S.sel.delete(c.id));render();return}
