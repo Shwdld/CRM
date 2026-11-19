@@ -405,6 +405,101 @@ details.more .field input,details.more .field select,details.more .field textare
   @keyframes slide{from{transform:translateX(30px);opacity:.5}}
   .chunk i{transition:width .6s cubic-bezier(.2,.8,.2,1)}
 }
+
+/* ═════ Couche Soft UI : soft skeuomorphism, verre discret, modules organiques, onglets intégrés ═════ */
+:root{--bg:#E3E2DE;--shell:#EEEDEA;--block:#F8F7F5;--raised:#FFFFFF;
+  --glass:rgba(250,249,247,.62);--glass-line:rgba(255,255,255,.8);
+  --sh:0 1px 0 rgba(255,255,255,.95) inset,0 16px 36px -18px rgba(52,40,30,.24),0 3px 8px -4px rgba(52,40,30,.08);
+  --sh-sm:0 1px 0 rgba(255,255,255,.9) inset,0 6px 14px -8px rgba(52,40,30,.28),0 1px 2px rgba(52,40,30,.06);
+  --sh-in:inset 0 2px 5px rgba(52,40,30,.10),inset 0 -1px 0 rgba(255,255,255,.9);
+  --bg-art:radial-gradient(70vw 60vh at 92% -12%,rgba(214,198,174,.55),transparent 62%),radial-gradient(60vw 60vh at -8% 112%,rgba(58,56,54,.12),transparent 60%)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0F0E0D;--shell:#171615;--block:#1F1D1B;--raised:#282523;
+  --glass:rgba(34,32,30,.6);--glass-line:rgba(255,255,255,.07);
+  --sh:0 1px 0 rgba(255,255,255,.05) inset,0 18px 40px -18px rgba(0,0,0,.75);
+  --sh-sm:0 1px 0 rgba(255,255,255,.06) inset,0 6px 14px -8px rgba(0,0,0,.7);
+  --sh-in:inset 0 2px 6px rgba(0,0,0,.5),inset 0 -1px 0 rgba(255,255,255,.04);
+  --bg-art:radial-gradient(70vw 60vh at 92% -12%,rgba(126,107,85,.22),transparent 62%),radial-gradient(60vw 60vh at -8% 112%,rgba(255,255,255,.04),transparent 60%)}}
+:root[data-theme="dark"]{--bg:#0F0E0D;--shell:#171615;--block:#1F1D1B;--raised:#282523;
+  --glass:rgba(34,32,30,.6);--glass-line:rgba(255,255,255,.07);
+  --sh:0 1px 0 rgba(255,255,255,.05) inset,0 18px 40px -18px rgba(0,0,0,.75);
+  --sh-sm:0 1px 0 rgba(255,255,255,.06) inset,0 6px 14px -8px rgba(0,0,0,.7);
+  --sh-in:inset 0 2px 6px rgba(0,0,0,.5),inset 0 -1px 0 rgba(255,255,255,.04);
+  --bg-art:radial-gradient(70vw 60vh at 92% -12%,rgba(126,107,85,.22),transparent 62%),radial-gradient(60vw 60vh at -8% 112%,rgba(255,255,255,.04),transparent 60%)}
+body{background:var(--bg-art),var(--bg);background-attachment:fixed}
+/* rail en verre flottant */
+.rail{top:14px;height:calc(100vh - 28px);margin:14px 0 14px 14px;background:var(--glass);-webkit-backdrop-filter:blur(22px) saturate(1.25);backdrop-filter:blur(22px) saturate(1.25);border:1px solid var(--glass-line);border-radius:34px 34px 34px 14px;box-shadow:var(--sh)}
+.nav button[aria-current="page"]{background:linear-gradient(180deg,color-mix(in srgb,var(--brand) 86%,#fff),var(--brand));box-shadow:var(--sh-sm)}
+.jn{border:0;background:var(--shell);box-shadow:var(--sh-in)}
+.jn button[aria-pressed="true"]{box-shadow:var(--sh-sm)}
+main{padding-top:20px}
+/* onglet intégré : le titre de page dépasse du grand conteneur et s'y raccorde par un congé */
+.tabrow{display:flex;justify-content:space-between;align-items:flex-end;gap:12px 16px;flex-wrap:wrap;position:relative;z-index:1}
+.tab{position:relative;background:var(--shell);border-radius:40px 40px 0 0;padding:22px 32px 8px 30px;max-width:100%}
+.tab::after{content:"";position:absolute;right:-30px;bottom:0;width:30px;height:30px;background:radial-gradient(circle at 100% 0,transparent 29.5px,var(--shell) 30px)}
+.tab h1{margin:0;font-family:var(--f-title);font-weight:400;font-size:clamp(40px,5vw,62px);letter-spacing:-.015em;line-height:.95}
+.tab h1 em{font-style:italic}
+.tab p{margin:8px 0 0;color:var(--muted)}
+.tabrow>.actions{padding-bottom:12px}
+.shell{background:var(--shell);border-radius:0 44px 44px 44px;padding:22px;box-shadow:0 40px 80px -50px rgba(52,40,30,.35);position:relative;min-height:60vh}
+.shell>.grid,.shell>.kpis{margin-bottom:0}
+.hello{gap:26px}
+.quote{border-left-color:color-mix(in srgb,var(--fg) 14%,transparent)}
+/* modules : grands arrondis, ombres douces, bords parfois asymétriques */
+.block{background:var(--block);border-radius:36px;box-shadow:var(--sh)}
+.grid>.block:nth-child(odd){border-radius:36px 36px 36px 14px}
+.grid>.block:nth-child(even){border-radius:14px 36px 36px 36px}
+.kpi{background:var(--block);box-shadow:var(--sh);border-radius:32px}
+.kpi.hero,.game{background:radial-gradient(120% 140% at 0% 0%,color-mix(in srgb,var(--brand) 82%,#fff) 0%,var(--brand) 55%);box-shadow:0 1px 0 rgba(255,255,255,.12) inset,0 22px 40px -22px rgba(30,20,12,.55)}
+.kpi.hero{border-radius:32px 32px 32px 12px}
+.game{border-radius:42px 42px 42px 16px;padding-bottom:64px;position:relative}
+/* sections qui se chevauchent : les quêtes glissent sur le bloc objectifs */
+.game+.grid{margin-top:-46px;position:relative;z-index:2}
+.game+.grid>.block:first-child{border-radius:36px 36px 36px 14px;box-shadow:0 -1px 0 rgba(255,255,255,.7) inset,0 -18px 40px -24px rgba(30,20,12,.35),var(--sh)}
+.chunk{box-shadow:inset 0 2px 4px rgba(0,0,0,.18)}
+.ring svg circle:last-child{filter:drop-shadow(0 2px 4px rgba(0,0,0,.25))}
+.q,.opp,.lever,.crow,.sib,.mini .it,.facts div,.next,.bcard,.cheer,details.more{box-shadow:var(--sh-sm)}
+.q{border-radius:24px 24px 24px 10px}
+.lever{border-radius:28px 28px 28px 12px}.lever.top{background:radial-gradient(120% 140% at 0% 0%,color-mix(in srgb,var(--brand) 82%,#fff) 0%,var(--brand) 55%)}
+/* boutons et commandes en relief doux */
+.btn{border:0;background:linear-gradient(180deg,var(--raised),color-mix(in srgb,var(--raised) 93%,var(--fg)));box-shadow:var(--sh-sm)}
+.btn:hover{filter:brightness(1.03)}
+.btn.primary{background:linear-gradient(180deg,color-mix(in srgb,var(--brand) 84%,#fff),var(--brand))}
+.btn.ghost{background:none;box-shadow:none}
+.btn:active,.done-btn:active{box-shadow:var(--sh-in)}
+.done-btn{background:linear-gradient(180deg,color-mix(in srgb,var(--brand) 84%,#fff),var(--brand));box-shadow:var(--sh-sm)}
+.round{border:0;box-shadow:var(--sh-sm)}
+.seg-f{background:var(--shell);box-shadow:var(--sh-in)}
+.seg-f button[aria-pressed="true"]{background:linear-gradient(180deg,color-mix(in srgb,var(--brand) 84%,#fff),var(--brand));box-shadow:var(--sh-sm)}
+.ctl select,.toolbar select,.toolbar input,.field input,.field select,.field textarea,.next .row input{border:0;background:var(--shell);box-shadow:var(--sh-in)}
+details.more .field input,details.more .field select,details.more .field textarea{background:var(--shell)}
+button.pill{border:0;background:var(--block);box-shadow:var(--sh-sm);color:var(--fg)}
+button.pill[aria-pressed="true"]{background:linear-gradient(180deg,color-mix(in srgb,var(--brand) 84%,#fff),var(--brand));color:var(--brand-ink)}
+.tags{gap:7px}
+.table-wrap{background:var(--block);box-shadow:var(--sh);border-radius:30px 30px 30px 12px}
+/* kanban : colonnes en creux, cartes en relief */
+.col{background:var(--block);box-shadow:var(--sh-in);border-radius:34px 34px 34px 14px}
+.col.archive{box-shadow:none}
+.pc-body{box-shadow:0 1px 0 rgba(255,255,255,.08) inset,0 14px 28px -16px rgba(20,14,10,.55)}
+.pc-pill{box-shadow:inset 0 1px 0 rgba(255,255,255,.06)}
+.pc-dots{box-shadow:inset 0 2px 4px rgba(0,0,0,.25)}
+.acct{background:var(--block);box-shadow:var(--sh);--nbg:var(--shell)}
+.acct:hover{background:var(--raised)}
+.notched>.go{box-shadow:var(--sh-sm);border:0;background:var(--raised)}
+.pc .notched>.go,.pc>.go{background:var(--block)}
+/* tiroirs et notifications en verre */
+.scrim{background:rgba(18,16,14,.18);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.drawer{background:var(--glass);-webkit-backdrop-filter:blur(30px) saturate(1.3);backdrop-filter:blur(30px) saturate(1.3);border:1px solid var(--glass-line);border-radius:38px 38px 38px 14px;box-shadow:var(--sh)}
+.drawer .facts div,.drawer .next,.drawer .sib,.drawer .crow{background:color-mix(in srgb,var(--raised) 82%,transparent)}
+.drawer .field input,.drawer .field select,.drawer .field textarea,.drawer .next .row input{background:color-mix(in srgb,var(--shell) 80%,transparent)}
+.notice{background:var(--glass);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);border:1px solid var(--glass-line);box-shadow:var(--sh-sm)}
+.toast{-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);box-shadow:var(--sh)}
+.vt{margin-right:2px}
+@media (max-width:760px){
+  .rail{margin:0;top:env(safe-area-inset-top,0px);height:auto;border-radius:0 0 26px 26px;border-width:0 0 1px}
+  .tab{border-radius:32px 32px 0 0;padding:18px 20px 6px}.tab::after{display:none}
+  .shell{border-radius:0 28px 28px 28px;padding:14px}
+  .tabrow>.actions{padding:0 0 10px}
+}
 </style>
 
 <div class="app">
@@ -688,7 +783,9 @@ const avC=(c,cls="")=>`<span class="av ${cls} ${cboard(c)==="prospect"&&cLate(c)
 const avO=(o,cls="")=>{const c=oContact(o);return`<span class="av ${cls} ${oLate(o)?"is-late":""}" style="--c:var(${ocolor(o)})">${esc(initials(c?cname(c):o.nom))}</span>`};
 const heatDots=v=>{const n={froid:1,tiede:2,chaud:3,dormant:0}[v]||0;return`<span class="temp"><span>${[1,2,3].map(i=>`<i class="${i<=n?"on":""}"></i>`).join("")}</span>${CHALEURS[v]||"—"}</span>`};
 const opt=(obj,v,empty)=>(empty!==undefined?`<option value="">${empty}</option>`:"")+Object.entries(obj).map(([k,l])=>`<option value="${k}" ${v===k?"selected":""}>${esc(l)}</option>`).join("");
-const head=(t,sub,acts="")=>`<div class="head"><div><h1>${t}</h1>${sub?`<p>${sub}</p>`:""}</div><div class="actions">${acts}</div></div>`;
+const head=(t,sub,acts="")=>`<div class="tabrow"><div class="tab"><h1>${t}</h1>${sub?`<p>${sub}</p>`:""}</div><div class="actions">${VT_VIEWS.includes(S.view)?viewTabs():""}${acts}</div></div><!--/head-->`;
+const VT_VIEWS=["prospect","pipeline","comptes","contacts"];
+const viewTabs=()=>`<div class="seg-f vt" role="tablist" aria-label="Vues">${[["prospect","Prospection"],["pipeline","Pipeline"],["comptes","Accounts"],["contacts","Contacts"]].map(([k,l])=>`<button role="tab" data-vt="${k}" aria-pressed="${S.view===k}">${l}</button>`).join("")}</div>`;
 const plural=(n,w)=>n+" "+(n>1?w.replace(/^(\S+)/,m=>/[sx]$/.test(m)?m:m+"s"):w);
 const cap=s=>s.charAt(0).toUpperCase()+s.slice(1);
 function examplesNotice(){
@@ -736,8 +833,8 @@ function vToday(){
   </section>`;
   const doy=Math.floor((new Date()-new Date(new Date().getFullYear(),0,0))/864e5);
   const jour=cap(new Date().toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"}));
-  const h=`<div class="head"><div class="hello"><div><h1>Bonjour</h1><p>${jour}</p></div><div class="quote">« ${QUOTES[doy%QUOTES.length]} »</div></div>
-    <div class="actions"><button class="btn primary" data-act="new-contact">+ Contact</button><button class="btn" data-act="new-opp">+ Opportunité</button></div></div>`;
+  const h=`<div class="tabrow"><div class="tab"><div class="hello"><div><h1>Bonjour</h1><p>${jour}</p></div><div class="quote">« ${QUOTES[doy%QUOTES.length]} »</div></div></div>
+    <div class="actions"><button class="btn primary" data-act="new-contact">+ Contact</button><button class="btn" data-act="new-opp">+ Opportunité</button></div></div><!--/head-->`;
   if(!S.ready)return h+game+`<div class="block"><div class="empty">Chargement…</div></div>`;
   if(!S.contacts.length&&!S.opps.length)return h+game+`<div class="block"><div class="empty"><b>Votre CRM est vide.</b> Importez votre Google Sheet depuis l'onglet « Importer », ou créez votre premier contact.</div></div>`;
   return h+legacyNotice()+examplesNotice()+game+`<div class="grid">${blocQuests(acts)}${blocPipe()}${blocTimeline()}</div>`;
@@ -767,8 +864,8 @@ function blocQuests(acts){
   const doneToday=acts.filter(h=>h.d===t&&xpOf(h.t)>0).length;
   const cats={};list.forEach(it=>{const q=quest(it);cats[q.cat]=(cats[q.cat]||0)+1});
   const total=doneToday+list.length,shown=S.home.showAll?list:list.slice(0,5);
-  return`<section class="block span-12 notched" style="--nbg:var(--bg)">${notch("Ouvrir la prospection",'data-goto="prospect"')}
-    <div class="b-h" style="padding-right:70px"><div><h2>Quêtes <em>du jour</em></h2>
+  return`<section class="block span-12">
+    <div class="b-h"><div><h2>Quêtes <em>du jour</em></h2>
       <p>${list.length?`${plural(list.length,"move")} pour faire avancer le pipe`:"Le pipe avance tout seul aujourd'hui"}</p></div></div>
     ${list.length?`<div class="qsum">${Object.entries(cats).map(([k,n])=>`<span><b>${n}</b>${n>1?k.replace(/^(\S+)/,w=>/[sx]$/.test(w)?w:w+"s"):k}</span>`).join("")}</div>`:""}
     <div class="qprog"><span>${doneToday} / ${total} joué${doneToday>1?"s":""} aujourd'hui</span><div class="chunk" style="--c:var(--c-conv)"><i style="width:${total?doneToday/total*100:0}%"></i></div></div>
@@ -1297,7 +1394,7 @@ function render(){
   buildIndex();renderNav();
   const V={today:vToday,prospect:vProspect,pipeline:vPipeline,comptes:vComptes,contacts:vContacts,projets:vProjets,forecast:vForecast,import:vImport}[S.view]||vToday;
   const keep=S.view==="import"&&document.getElementById("i-paste");
-  if(!keep)document.getElementById("main").innerHTML=V();
+  if(!keep){const html=V(),i=html.indexOf("<!--/head-->");document.getElementById("main").innerHTML=i<0?`<div class="shell">${html}</div>`:html.slice(0,i)+`<div class="shell">${html.slice(i+12)}</div>`}
   renderLayer();
 }
 function renderLayer(){
@@ -1320,6 +1417,7 @@ document.addEventListener("click",async e=>{
   if(t.closest("[data-close]")){closeLayer();return}
   const svc=t.closest("[data-svc]");if(svc){svc.classList.toggle("primary");return}
   const pk=t.closest("[data-pick]");if(pk){const i=document.getElementById("c-studio")||document.getElementById("q-studio");i.value=pk.dataset.pick;i.dispatchEvent(new Event("input",{bubbles:true}));return}
+  const vt=t.closest("[data-vt]");if(vt){go(vt.dataset.vt);return}
   const fl=t.closest("[data-filter]");if(fl){const[k,v]=fl.dataset.filter.split(":");S.filters[k]=S.filters[k]===v?"":v;render();return}
   const wk=t.closest("[data-weeks]");if(wk){S.home.weeks=+wk.dataset.weeks;render();return}
   const pe=t.closest("[data-period]");if(pe){S.fc.period=pe.dataset.period;render();return}
