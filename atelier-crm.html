@@ -716,7 +716,7 @@ const oCompteName=o=>(IDX.byId[o.compteId]||{}).nom||o.compteNom||"";
 const oContact=o=>IDX.contact[o.contactId]||null;
 const TIERS={core:{l:"Core",d:"Fit créatif, potentiel, désirabilité, reconnaissance",m:100},strong:{l:"Strong",d:"Bons comptes, un peu moins désirables",m:68},opp:{l:"Opportunistic",d:"À saisir si l'occasion se présente",m:42},low:{l:"Low priority",d:"Fit plus faible, au cas où",m:22}};
 const tierColor=k=>TIERS[k]?`color-mix(in srgb,var(--brand) ${TIERS[k].m}%,var(--raised))`:"var(--line)";
-const ACC_CAT={da:"Studios & agences · DA",graph:"Studios & agences · Design graphique",apporteur:"Apporteurs d'affaires",marque:"Marques · en direct"};
+const ACC_CAT={da:"Studios & agences · DA",graph:"Studios & agences · Design graphique",apporteur:"Apporteurs d'affaires",marque:"Marques · en direct",freelance:"Directeurs artistiques · Designers graphiques",autre:"Autres"};
 const GEO={fr:"France",intl:"Étranger"};
 const MAT=[["jamais","Jamais contacté"],["contacte","Contacté"],["relance","Relancé · en pause"],["echange","Échange · Top of mind"],["besoin","Besoin évoqué"],["r1","R1"],["attente","En attente · négo"],["client","Client"]];
 const ACC_STATUS={pipeline:{l:"Pipeline",c:"--c-qualif"},tom:{l:"Top of mind",c:"--c-conv"},prospection:{l:"Prospection",c:"--c-contact"},dormant:{l:"Dormant",c:"--c-sommeil"}};
@@ -1511,7 +1511,7 @@ function drawerCompte(a){
     <div class="classify">
       <div><span class="label">Priorité</span><div class="seg-f" role="group" aria-label="Priorité">${Object.entries(TIERS).map(([k,t])=>`<button type="button" data-settier="${k}" data-id="${esc(a.id)}" aria-pressed="${a.tier===k}">${t.l}</button>`).join("")}</div>
         <small class="muted">${a.tier?esc(TIERS[a.tier].d):"Pas encore classé : choisissez une priorité."}</small></div>
-      <div><span class="label">Catégorie</span><div class="seg-f" role="group" aria-label="Catégorie">${Object.entries({da:"Studio · DA",graph:"Studio · Design graphique",apporteur:"Apporteur d'affaires",marque:"Marque en direct"}).map(([k,l])=>`<button type="button" data-setacc="cat:${k}" data-id="${esc(a.id)}" aria-pressed="${a.cat===k}">${l}</button>`).join("")}</div>
+      <div><span class="label">Catégorie</span><div class="seg-f" role="group" aria-label="Catégorie">${Object.entries({da:"Studio · DA",graph:"Studio · Design graphique",apporteur:"Apporteur d'affaires",marque:"Marque en direct",freelance:"Directeur artistique / Designer graphique",autre:"Autre"}).map(([k,l])=>`<button type="button" data-setacc="cat:${k}" data-id="${esc(a.id)}" aria-pressed="${a.cat===k}">${l}</button>`).join("")}</div>
         ${a.doc&&a.doc.cat?"":`<small class="muted">${a.cat?"Devinée automatiquement : cliquez pour confirmer ou changer.":"Choisissez une catégorie."}</small>`}</div>
       <div><span class="label">France / étranger</span><div class="seg-f" role="group" aria-label="France ou étranger">${Object.entries(GEO).map(([k,l])=>`<button type="button" data-setacc="geo:${k}" data-id="${esc(a.id)}" aria-pressed="${a.geo===k}">${l}</button>`).join("")}</div>
         ${a.doc&&a.doc.geo?"":`<small class="muted">Déduit de la localisation des contacts.</small>`}</div>
