@@ -558,7 +558,7 @@ function chaleur(c){
   if(c.chaleur)return c.chaleur;
   const s=cstage(c);
   if(DORMANT_C.includes(s))return"dormant";
-  if(s==="pipeline"){const os=oppsOf(c).filter(o=>OPEN.includes(ostage(o)));if(os.some(o=>RANK[ostage(o)]>=3))return"chaud";if(os.length)return"tiede";return"dormant"}
+  if(s==="pipeline"){const os=oppsOf(c).filter(o=>OPEN.includes(ostage(o)));if(os.some(o=>RANK[ostage(o)]>=3))return"chaud";if(os.length)return"tiede";if(os.length===0&&oppsOf(c).some(o=>ostage(o)==="signe"))return"tiede";return c.converti&&diff(today(),c.converti)<=90?"tiede":"dormant"}
   if(c.type==="tiede"||c.type==="ancien_client")return"tiede";
   return"froid";
 }
@@ -659,14 +659,19 @@ function accounts(){
     const d=a.doc||{},cs=a.contacts,os=a.opps;
     const open=os.filter(o=>OPEN.includes(ostage(o)));
     const signedRecent=os.some(o=>ostage(o)==="signe"&&o.signeLe&&diff(today(),o.signeLe)<180);
-    const statut=signedRecent?"actif":open.length?"opportunite":cs.some(c=>["a_contacter","contacte","relance"].includes(cstage(c)))?"prospection":"dormant";
+    /* Statut global déduit des contacts : la personne la plus « chaude » donne le ton du compte */
+    const HEAT={chaud:3,tiede:2,froid:1,dormant:0};
+    const heat=cs.reduce((m,c)=>Math.max(m,HEAT[chaleur(c)]??0),0);
+    const unpaid=S.projets.some(p=>p.stage!=="paye"&&os.some(o=>o.id===p.oppId));
+    const statut=signedRecent||unpaid?"actif":(open.length||heat===3)?"opportunite":(heat>=1||cs.some(c=>["a_contacter","contacte","relance","pipeline"].includes(cstage(c))&&chaleur(c)!=="dormant"))?"prospection":"dormant";
+    const accHeat=["dormant","froid","tiede","chaud"][heat];
     const moves=[...cs.map(c=>lastOf(c.hist)),...os.map(o=>lastOf(o.hist))].filter(Boolean).sort((x,y)=>y.d.localeCompare(x.d));
     const nexts=[...cs.filter(c=>c.next&&c.next.date&&cboard(c)==="prospect").map(c=>({date:c.next.date,label:c.next.label,who:c.nom||c.studio})),
       ...open.filter(o=>o.next&&o.next.date).map(o=>({date:o.next.date,label:o.next.label,who:o.nom}))].sort((x,y)=>x.date.localeCompare(y.date));
     const next=d.nextDate?{date:d.nextDate,label:d.nextLabel||"Point global",who:"Compte",manual:true}:nexts[0]||null;
     const principal=cs.find(c=>c.id===d.principal)||null;
     const conv=cs.filter(c=>["contacte","relance"].includes(cstage(c))||open.some(o=>o.contactId===c.id));
-    return{...a,statut,lastMove:moves[0]||null,next,principal,conv,open,valeur:open.reduce((t,o)=>t+(+o.valeur||0),0),pond:open.reduce((t,o)=>t+pondere(o),0),
+    return{...a,statut,accHeat,lastMove:moves[0]||null,next,principal,conv,open,valeur:open.reduce((t,o)=>t+(+o.valeur||0),0),pond:open.reduce((t,o)=>t+pondere(o),0),
       type:d.type||"",pays:d.pays||"",notes:d.notes||""};
   });
 }
@@ -982,7 +987,7 @@ function acctCard(a){
   return`<article class="acct notched" data-openc="${esc(a.id)}">${notch("Ouvrir l'account",`data-openc="${esc(a.id)}"`)}
     <h3>${esc(a.nom)}</h3>
     <div class="meta">${esc([ACC_TYPES[a.type],a.pays].filter(Boolean).join(" · ")||"Type et pays à préciser")}</div>
-    <div class="row">${stag(a.statut)}<span class="val">${a.valeur?keur(a.valeur):""}</span></div>
+    <div class="row"><span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${stag(a.statut)}${a.contacts.length?heatDots(a.accHeat):""}</span><span class="val">${a.valeur?keur(a.valeur):""}</span></div>
     <div class="row"><div class="avs">${a.contacts.slice(0,5).map(c=>avC(c,"sm")).join("")}</div><small class="muted">${plural(a.contacts.length,"contact")}${a.open.length?" · "+plural(a.open.length,"opportunité"):""}</small></div>
     <div class="row"><span class="muted">Dernier mouvement</span><span>${a.lastMove?ago(a.lastMove.d):"—"}</span></div>
     <div class="row"><span class="muted">Prochaine action</span><span class="${a.next&&a.next.date<today()?"late":""}">${a.next?rel(a.next.date):"—"}</span></div>
@@ -1340,7 +1345,7 @@ function drawerContact(c){
 function drawerCompte(a){
   const cs=a.contacts.slice().sort((x,y)=>(chaleur(y)==="chaud")-(chaleur(x)==="chaud"));
   return`<div class="scrim" data-close></div><aside class="drawer" role="dialog" aria-label="Account">
-  <div class="drawer-h"><div style="flex:1;min-width:0"><input class="title-edit" id="a-nom" value="${esc(a.nom)}" aria-label="Nom de l'entreprise" title="Cliquez pour modifier"><div class="sub">${esc([ACC_TYPES[a.type],a.pays].filter(Boolean).join(" · ")||"Type et pays à préciser")}${stag(a.statut)}</div></div>
+  <div class="drawer-h"><div style="flex:1;min-width:0"><input class="title-edit" id="a-nom" value="${esc(a.nom)}" aria-label="Nom de l'entreprise" title="Cliquez pour modifier"><div class="sub">${esc([ACC_TYPES[a.type],a.pays].filter(Boolean).join(" · ")||"Type et pays à préciser")}${stag(a.statut)}${a.contacts.length?heatDots(a.accHeat):""}<span class="muted" style="font-size:12px">· déduit de ses contacts</span></div></div>
     <button class="round" data-close aria-label="Fermer">×</button></div>
   <div class="drawer-b">
     <div class="facts"><div><span class="label">Dernier mouvement</span><b>${a.lastMove?ago(a.lastMove.d):"—"}</b></div>
