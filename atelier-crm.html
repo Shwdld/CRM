@@ -175,7 +175,7 @@ main{min-width:0;padding-block:28px 80px;padding-left:max(16px,env(safe-area-ins
 .stack-leg{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:12px;color:var(--muted)}
 .stack-leg span{display:inline-flex;align-items:center;gap:6px}
 .stack-leg b{color:var(--fg);font-weight:500}
-.boards{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.boards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
 .bcard{background:var(--raised);border-radius:22px;padding:16px 18px 18px;text-decoration:none;display:flex;flex-direction:column;gap:6px;--nbg:var(--block)}
 .bcard:hover{box-shadow:var(--shadow)}
 .bcard b{font-family:var(--f-title);font-weight:400;font-size:26px;line-height:1;padding-right:60px}
@@ -487,10 +487,19 @@ const PROSPECT=[
 /* Niveau d'activation : seul ce qui est activé apparaît dans le board et les relances dues */
 const ACT={backlog:{l:"Backlog",c:"--c-todo"},mois:{l:"Ce mois-ci",c:"--c-react"},semaine:{l:"Cette semaine",c:"--c-contact"},actif:{l:"Actif maintenant",c:"--c-conv"},pause:{l:"En pause",c:"--c-sommeil"}};
 const LIM={week:10,accounts:20};
-const C_STAGE=Object.fromEntries([...PROSPECT,{k:"pipeline",l:"En pipeline",c:"--c-conv"}].map(s=>[s.k,s]));
+const C_STAGE=Object.fromEntries([...PROSPECT,{k:"tom",l:"Top of mind",c:"--c-conv"},{k:"pipeline",l:"Pipeline",c:"--c-qualif"}].map(s=>[s.k,s]));
+/* Les 3 zones du cycle : Prospection → Top of mind ⇄ Pipeline */
+const ZONE_L={prospect:"Prospection",tom:"Top of mind",pipeline:"Pipeline"};
+const TOM=[
+  {k:"echange",l:"Ont répondu · échange",c:"--c-contact",d:"Vous connaissent, pas de besoin ouvert",cad:30},
+  {k:"ancien",l:"Anciens clients",c:"--c-signe",d:"Projet terminé, rester présente",cad:45},
+  {k:"apporteur",l:"Apporteurs & partenaires",c:"--c-react",d:"Réseau qui peut recommander",cad:35},
+  {k:"reporte",l:"Besoin reporté",c:"--c-attente",d:"Un projet a été repoussé",cad:60}];
+const TOM_SEG=Object.fromEntries(TOM.map(t=>[t.k,t]));
+const CAD_L={"14":"Toutes les 2 semaines","30":"Tous les mois","45":"Toutes les 6 semaines","60":"Tous les 2 mois","90":"Tous les 3 mois"};
 /* Opportunités : board Pipeline */
 const PIPE=[
-  {k:"repondu",l:"A répondu",c:"--c-rep",d:"Contacts qui ont répondu, et leurs opportunités à qualifier",p:10},
+  {k:"repondu",l:"Besoin évoqué",c:"--c-rep",d:"Un projet ou un besoin réel est évoqué",p:10},
   {k:"r1",l:"R1",c:"--c-call",d:"Call planifié ou tenu",p:35},
   {k:"attente",l:"Attente · négociation",c:"--c-attente",d:"Attente de décision ou discussion en cours",p:65},
   {k:"signe",l:"Signé",c:"--c-signe",d:"Devis accepté",p:100},
@@ -516,7 +525,7 @@ const GOALS=[
   {k:"calls",l:"calls",c:"--c-call",re:/^Call R1/,def:4},
   {k:"propositions",l:"propositions",c:"--c-attente",re:/^Proposition envoyée/,def:2},
 ];
-const XP_RULES=[[/^Premier message/,1],[/^Relance \d+ envoyée/,1],[/^Message de réactivation/,2],[/A répondu/,3],[/^Qualification/,3],[/^Call R1/,5],[/^Proposition envoyée/,8],[/^Suivi/,2],[/^Négociation|^En attente/,2],[/^Signé/,20]];
+const XP_RULES=[[/^Prise de nouvelles/,2],[/^Premier message/,1],[/^Relance \d+ envoyée/,1],[/^Message de réactivation/,2],[/A répondu/,3],[/^Qualification/,3],[/^Call R1/,5],[/^Proposition envoyée/,8],[/^Suivi/,2],[/^Négociation|^En attente/,2],[/^Signé/,20]];
 const xpOf=t=>{for(const[r,n]of XP_RULES)if(r.test(t))return n;return 0};
 /* Repères de conversion pour une activité freelance B2B créative (modifiables plus tard) */
 const BENCH={rep:.15,call:.5,prop:.6,sign:.35};
@@ -547,7 +556,8 @@ function migrate(c){
   const s=c.stage||"a_contacter";
   const map={prospection:(c.relances||1)<=1?"contacte":"relance",veille:"sommeil"};
   if(map[s])c.stage=map[s];
-  if(OLD_PIPE.includes(c.stage)){c.legacy=c.stage;c.stage="pipeline"}
+  if(OLD_PIPE.includes(c.stage)){c.legacy=c.stage;c.stage="tom"}
+  if(c.stage==="pipeline")c.stage="tom";
   if(!C_STAGE[c.stage])c.stage="a_contacter";
   if(!c.poste&&c.nom&&c.nom.includes(",")){const i=c.nom.indexOf(",");c.poste=c.nom.slice(i+1).trim();c.nom=c.nom.slice(0,i).trim()}
   if(!c.type&&c.cible)c.type=c.cible;
@@ -555,27 +565,32 @@ function migrate(c){
   return c;
 }
 const cstage=c=>c.stage||"a_contacter";
-const cboard=c=>cstage(c)==="pipeline"?"pipe":"prospect";
+const projectDone=o=>!!o.termine||S.projets.some(p=>p.oppId===o.id&&["livre","facture","paye"].includes(p.stage));
+const liveOpps=c=>S.opps.filter(o=>o.contactId===c.id&&(OPEN.includes(ostage(o))||(ostage(o)==="signe"&&!projectDone(o))));
+const zoneOf=c=>liveOpps(c).length?"pipeline":cstage(c)==="tom"?"tom":"prospect";
+const cboard=c=>({prospect:"prospect",tom:"tom",pipeline:"pipe"})[zoneOf(c)];
+const tomSeg=c=>TOM_SEG[c.tomSeg]?c.tomSeg:(c.type==="ancien_client"?"ancien":c.type==="apporteur"?"apporteur":"echange");
+const cadence=c=>+c.cadence||TOM_SEG[tomSeg(c)].cad;
 const relanceNum=c=>Math.max(1,(c.relances||1));
-const ccolor=c=>(C_STAGE[cstage(c)]||C_STAGE.a_contacter).c;
-const clabel=c=>{const s=cstage(c);if(s==="relance")return"Relance "+relanceNum(c)+" prévue";return C_STAGE[s].l};
+const ccolor=c=>{const z=zoneOf(c);if(z==="pipeline")return ocolor(liveOpps(c)[0]);if(z==="tom")return TOM_SEG[tomSeg(c)].c;return(C_STAGE[cstage(c)]||C_STAGE.a_contacter).c};
+const clabel=c=>{const z=zoneOf(c);if(z==="pipeline")return"Pipeline · "+olabel(liveOpps(c)[0]);if(z==="tom")return"Top of mind · "+TOM_SEG[tomSeg(c)].l;const s=cstage(c);if(s==="relance")return"Relance "+relanceNum(c)+" prévue";return C_STAGE[s].l};
 const oppsOf=c=>S.opps.filter(o=>o.contactId===c.id);
 function chaleur(c){
   if(c.chaleur)return c.chaleur;
   const s=cstage(c);
   if(DORMANT_C.includes(s))return"dormant";
-  if(s==="pipeline"){const os=oppsOf(c).filter(o=>OPEN.includes(ostage(o)));if(os.some(o=>RANK[ostage(o)]>=3))return"chaud";if(os.length)return"tiede";if(os.length===0&&oppsOf(c).some(o=>ostage(o)==="signe"))return"tiede";return c.converti&&diff(today(),c.converti)<=90?"tiede":"dormant"}
+  {const z=zoneOf(c);if(z==="pipeline")return liveOpps(c).some(o=>RANK[ostage(o)]>=3||ostage(o)==="signe")?"chaud":"tiede";if(z==="tom")return"tiede"}
   if(c.type==="tiede"||c.type==="ancien_client")return"tiede";
   return"froid";
 }
-const actv=c=>cboard(c)==="pipe"?"pipeline":(c.activation&&ACT[c.activation]?c.activation:(DORMANT_C.includes(cstage(c))?"pause":"backlog"));
+const actv=c=>cboard(c)!=="prospect"?zoneOf(c):(c.activation&&ACT[c.activation]?c.activation:(DORMANT_C.includes(cstage(c))?"pause":"backlog"));
 const onBoard=c=>cboard(c)==="prospect"&&["semaine","actif"].includes(actv(c));
 const boardAccounts=()=>new Set(S.contacts.filter(onBoard).map(c=>compteKey(c)||c.id));
 const weekUsed=()=>S.contacts.filter(c=>c.activeLe&&c.activeLe>=monday()).length;
-const awaitingOpp=c=>cstage(c)==="pipeline"&&!S.opps.some(o=>o.contactId===c.id);
+const isTom=c=>zoneOf(c)==="tom";
 /* « suivi » = ce qui a une prochaine action pertinente (activé, réactivation en pause, ou a répondu sans opportunité) */
-const isTracked=c=>onBoard(c)||(actv(c)==="pause"&&DORMANT_C.includes(cstage(c)))||awaitingOpp(c);
-const isDue=c=>(awaitingOpp(c)&&c.next&&c.next.date&&c.next.date<=today())||cboard(c)==="prospect"&&c.next&&c.next.date&&c.next.date<=today()&&(onBoard(c)||(actv(c)==="pause"&&DORMANT_C.includes(cstage(c))));
+const isTracked=c=>onBoard(c)||(actv(c)==="pause"&&DORMANT_C.includes(cstage(c)))||isTom(c);
+const isDue=c=>(isTom(c)&&c.next&&c.next.date&&c.next.date<=today())||cboard(c)==="prospect"&&c.next&&c.next.date&&c.next.date<=today()&&(onBoard(c)||(actv(c)==="pause"&&DORMANT_C.includes(cstage(c))));
 function suggestScore(c){let s=0;if(actv(c)==="mois")s+=5;if((c.relances||0)>0)s+=3;s+={chaud:4,tiede:2,froid:0,dormant:-1}[chaleur(c)]||0;
   if(["tiede","ancien_client"].includes(c.type))s+=2;if(["reco","intro","inbound"].includes(c.source))s+=2;if(c.email||c.linkedin)s+=1;if(c.next&&c.next.date&&c.next.date<=today())s+=1;return s}
 function suggestReason(c){const r=[];if(actv(c)==="mois")r.push("prévu ce mois-ci");if((c.relances||0)>0)r.push("déjà contacté");if(["reco","intro","inbound"].includes(c.source))r.push(SOURCES[c.source].toLowerCase());
@@ -584,6 +599,9 @@ const cLate=c=>!!(c.next&&c.next.date&&c.next.date<today());
 function lastOf(hist){const h=(hist||[]).find(x=>!/^Fiche créée/.test(x.t));return h||null}
 function lastContact(c){const all=[lastOf(c.hist),...oppsOf(c).map(o=>lastOf(o.hist))].filter(Boolean).sort((a,b)=>b.d.localeCompare(a.d));return all[0]||null}
 function tipFor(c){
+  if(zoneOf(c)==="tom"){const sg=tomSeg(c);if(sg==="ancien")return TIPS.ancien_client;if(sg==="apporteur")return TIPS.apporteur;
+    if(sg==="reporte")return"Revenir au bon moment avec du concret : une idée pour leur projet, une référence proche, une disponibilité.";
+    return"Rester présente sans rien demander : un projet récent, une actu, une ressource utile, une invitation.";}
   if(c.type==="apporteur")return TIPS.apporteur;
   if(c.type==="ancien_client")return TIPS.ancien_client;
   return TIPS[chaleur(c)];
@@ -607,14 +625,16 @@ function rythme(c,n,from){
 function applyC(c,ev,opts={}){
   const t=today(),h=(c.hist||[]).slice(),p={};const log=x=>h.unshift({d:t,t:x});
   switch(ev){
-    case"envoye":{const fresh=DORMANT_C.includes(cstage(c))||cstage(c)==="pipeline";const n=fresh?1:(c.relances||0)+1;p.relances=n;
+    case"envoye":{const fresh=DORMANT_C.includes(cstage(c))||cstage(c)==="tom";const n=fresh?1:(c.relances||0)+1;p.relances=n;
       log(fresh?"Message de réactivation envoyé":n===1?"Premier message envoyé":"Relance "+(n-1)+" envoyée");
       const r=rythme(c,n,t);p.stage=r.stage;p.next=r.next;if(fresh){p.activation="actif";if(!(c.activeLe>=monday()))p.activeLe=t}
       if(r.stage==="sommeil"){p.activation="pause";log("Pas de réponse après 3 relances · mise en sommeil · place libérée")}break}
     case"sommeil":p.stage="sommeil";p.activation="pause";p.next={date:opts.date||addDays(t,75),label:"Fin de la pause : réactiver ?"};log("Mis en sommeil");break;
     case"reactiver":p.stage="reactiver";p.activation="pause";p.next={date:opts.date||addDays(t,30),label:"Réactiver avec un nouvel angle"};log("À réactiver");break;
     case"a_contacter":p.stage="a_contacter";p.next={date:t,label:"Envoyer le premier message"};break;
-    case"repondu":p.stage="pipeline";p.activation="";p.next={date:addDays(t,3),label:"Qualifier le besoin · créer une opportunité si besoin réel"};p.converti=t;log("A répondu");break;
+    case"repondu":p.stage="tom";p.tomSeg=c.tomSeg||(c.type==="apporteur"?"apporteur":c.type==="ancien_client"?"ancien":"echange");p.activation="";p.next={date:addDays(t,14),label:"Garder le lien · proposer un échange"};p.converti=t;log("A répondu · passe en Top of mind");break;
+    case"touch":p.next={date:addDays(t,cadence(c)),label:"Prendre des nouvelles"};log("Prise de nouvelles");break;
+    case"prospect":p.stage="contacte";p.activation="backlog";p.next={date:addDays(t,7),label:"Relance"};log("Repassé en prospection");break;
     case"suivi":p.next={date:addDays(t,7),label:(c.next&&c.next.label)||"Suivi"};log("Suivi · "+((c.next&&c.next.label)||"contact"));break;
   }
   p.hist=h.slice(0,60);p.maj=t;return p;
@@ -658,7 +678,7 @@ function compteKey(c){
 const compteName=c=>{const k=compteKey(c);return k&&IDX.byId[k]?IDX.byId[k].nom:(c.studio||"")};
 const oCompteName=o=>(IDX.byId[o.compteId]||{}).nom||o.compteNom||"";
 const oContact=o=>IDX.contact[o.contactId]||null;
-const ACC_STATUS={actif:{l:"Actif",c:"--c-signe"},opportunite:{l:"Opportunité",c:"--c-qualif"},prospection:{l:"Prospection",c:"--c-contact"},dormant:{l:"Dormant",c:"--c-sommeil"}};
+const ACC_STATUS={pipeline:{l:"Pipeline",c:"--c-qualif"},tom:{l:"Top of mind",c:"--c-conv"},prospection:{l:"Prospection",c:"--c-contact"},dormant:{l:"Dormant",c:"--c-sommeil"}};
 function accounts(){
   const map={};
   S.comptes.forEach(a=>{map[a.id]={id:a.id,doc:a,nom:a.nom,contacts:[],opps:[]}});
@@ -671,16 +691,18 @@ function accounts(){
     /* Statut global déduit des contacts : la personne la plus « chaude » donne le ton du compte */
     const HEAT={chaud:3,tiede:2,froid:1,dormant:0};
     const heat=cs.reduce((m,c)=>Math.max(m,HEAT[chaleur(c)]??0),0);
-    const unpaid=S.projets.some(p=>p.stage!=="paye"&&os.some(o=>o.id===p.oppId));
-    const statut=signedRecent||unpaid?"actif":(open.length||heat===3)?"opportunite":(heat>=1||cs.some(c=>["a_contacter","contacte","relance","pipeline"].includes(cstage(c))&&chaleur(c)!=="dormant"))?"prospection":"dormant";
+    const unpaid=S.projets.some(p=>p.stage==="production"&&os.some(o=>o.id===p.oppId&&!o.termine));
+    const zones=cs.map(zoneOf);
+    const statut=(open.length||unpaid||zones.includes("pipeline"))?"pipeline":zones.includes("tom")?"tom":cs.some(c=>zoneOf(c)==="prospect"&&!DORMANT_C.includes(cstage(c)))?"prospection":"dormant";
+    const ancien=os.some(o=>ostage(o)==="signe")||cs.some(c=>c.type==="ancien_client");
     const accHeat=["dormant","froid","tiede","chaud"][heat];
     const moves=[...cs.map(c=>lastOf(c.hist)),...os.map(o=>lastOf(o.hist))].filter(Boolean).sort((x,y)=>y.d.localeCompare(x.d));
-    const nexts=[...cs.filter(c=>c.next&&c.next.date&&cboard(c)==="prospect").map(c=>({date:c.next.date,label:c.next.label,who:c.nom||c.studio})),
+    const nexts=[...cs.filter(c=>c.next&&c.next.date&&isTracked(c)).map(c=>({date:c.next.date,label:c.next.label,who:c.nom||c.studio})),
       ...open.filter(o=>o.next&&o.next.date).map(o=>({date:o.next.date,label:o.next.label,who:o.nom}))].sort((x,y)=>x.date.localeCompare(y.date));
     const next=d.nextDate?{date:d.nextDate,label:d.nextLabel||"Point global",who:"Compte",manual:true}:nexts[0]||null;
     const principal=cs.find(c=>c.id===d.principal)||null;
     const conv=cs.filter(c=>["contacte","relance"].includes(cstage(c))||open.some(o=>o.contactId===c.id));
-    return{...a,statut,accHeat,lastMove:moves[0]||null,next,principal,conv,open,valeur:open.reduce((t,o)=>t+(+o.valeur||0),0),pond:open.reduce((t,o)=>t+pondere(o),0),
+    return{...a,statut,ancien,accHeat,lastMove:moves[0]||null,next,principal,conv,open,valeur:open.reduce((t,o)=>t+(+o.valeur||0),0),pond:open.reduce((t,o)=>t+pondere(o),0),
       type:d.type||"",pays:d.pays||"",notes:d.notes||""};
   });
 }
@@ -727,7 +749,7 @@ async function boot(){
 }
 
 /* ───────── Navigation & thème ───────── */
-const VIEWS=[["today","Dashboard"],["dues","Relances dues"],["prospect","Prospection"],["pipeline","Pipeline"],["comptes","Accounts"],["contacts","Base de contacts"],["projets","Projets"],["forecast","Revenue forecast"],["import","Importer"],["params","Paramètres"]];
+const VIEWS=[["today","Dashboard"],["dues","Relances dues"],["prospect","Prospection"],["tom","Top of mind"],["pipeline","Pipeline"],["comptes","Accounts"],["contacts","Base de contacts"],["projets","Projets"],["forecast","Revenue forecast"],["import","Importer"],["params","Paramètres"]];
 function dueCount(){return S.contacts.filter(isDue).length+S.opps.filter(o=>OPEN.includes(ostage(o))&&o.next&&o.next.date&&o.next.date<=today()).length}
 function renderNav(){
   const due=dueCount();
@@ -819,7 +841,7 @@ function questItems(){
 function quest(it){
   const x=it.x;
   if(it.k==="c"){const s=cstage(x),who=x.nom&&compteName(x)?x.nom+" · "+compteName(x):cname(x);
-    if(s==="pipeline")return{ev:"suivi",t:"Qualifier "+who,cat:"qualification",xp:3};
+    if(s==="tom")return{ev:"touch",t:"Prendre des nouvelles de "+who,cat:"top of mind",xp:2};
     if(s==="a_contacter")return{ev:"envoye",t:"Écrire à "+who,cat:"message",xp:1};
     if(DORMANT_C.includes(s))return{ev:"envoye",t:"Réactiver "+who,cat:"réactivation",xp:2};
     return{ev:"envoye",t:"Relancer "+who,cat:"relance",xp:1};}
@@ -858,7 +880,8 @@ function questRow(it){
   </div>`;
 }
 function blocPipe(){
-  const parts=[...PROSPECT.map(s=>({s,n:S.contacts.filter(c=>onBoard(c)&&cstage(c)===s.k).length})),...PIPE.map(s=>({s,n:S.opps.filter(o=>ostage(o)===s.k).length}))].filter(x=>x.n);
+  const tomN=S.contacts.filter(isTom).length;
+  const parts=[...PROSPECT.map(s=>({s,n:S.contacts.filter(c=>onBoard(c)&&cstage(c)===s.k).length})),{s:{l:"Top of mind",c:"--c-conv"},n:tomN},...PIPE.map(s=>({s,n:S.opps.filter(o=>ostage(o)===s.k).length}))].filter(x=>x.n);
   const pros=S.contacts.filter(onBoard),backlogN=S.contacts.filter(c=>actv(c)==="backlog").length,open=S.opps.filter(o=>OPEN.includes(ostage(o)));
   const brut=open.reduce((t,o)=>t+(+o.valeur||0),0),pond=open.reduce((t,o)=>t+pondere(o),0);
   const proDue=pros.filter(c=>c.next&&c.next.date<=today()).length;
@@ -868,6 +891,8 @@ function blocPipe(){
     <div class="boards">
       <a class="bcard notched" href="#prospect">${NOTCH_STATIC}<b>Prospection <em>&amp; relances</em></b><small>${pros.length} activés · ${proDue} à jouer aujourd'hui · ${backlogN} en backlog</small>
         <div class="dots">${PROSPECT.map(s=>`<i style="--c:var(${s.c})"></i>`).join("")}</div></a>
+      <a class="bcard notched" href="#tom">${NOTCH_STATIC}<b>Top <em>of mind</em></b><small>${tomN} relations · ${S.contacts.filter(c=>isTom(c)&&c.next&&c.next.date<=today()).length} rappel(s) dû(s)</small>
+        <div class="dots">${TOM.map(s=>`<i style="--c:var(${s.c})"></i>`).join("")}</div></a>
       <a class="bcard notched" href="#pipeline">${NOTCH_STATIC}<b>Pipeline</b><small>${open.length} opportunités${brut?" · "+keur(brut):""} · ${S.opps.filter(o=>ostage(o)==="signe").length} signée(s)</small>
         <div class="dots">${PIPE.map(s=>`<i style="--c:var(${s.c})"></i>`).join("")}</div></a>
     </div>
@@ -875,10 +900,10 @@ function blocPipe(){
 }
 function blocTimeline(){
   const t=today(),N=S.home.weeks*7;const days=[];for(let i=0;i<N;i++)days.push(addDays(t,i));const end=days[days.length-1];
-  const C=S.contacts.filter(c=>isTracked(c)&&c.next&&c.next.date&&c.next.date<=end).map(c=>({id:c.id,k:"c",date:c.next.date,label:c.next.label,who:cname(c),col:ccolor(c),late:cLate(c),row:DORMANT_C.includes(cstage(c))?"react":awaitingOpp(c)?"calls":"relances"}));
-  const O=S.opps.filter(o=>(OPEN.includes(ostage(o))||ostage(o)==="perdu")&&o.next&&o.next.date&&o.next.date<=end).map(o=>({id:o.id,k:"o",date:o.next.date,label:o.next.label,who:o.nom,col:ocolor(o),late:oLate(o),row:ostage(o)==="perdu"?"react":["repondu","qualification"].includes(ostage(o))?"calls":"props"}));
+  const C=S.contacts.filter(c=>isTracked(c)&&c.next&&c.next.date&&c.next.date<=end).map(c=>({id:c.id,k:"c",date:c.next.date,label:c.next.label,who:cname(c),col:ccolor(c),late:cLate(c),row:DORMANT_C.includes(cstage(c))?"react":isTom(c)?"tom":"relances"}));
+  const O=S.opps.filter(o=>OPEN.includes(ostage(o))&&o.next&&o.next.date&&o.next.date<=end).map(o=>({id:o.id,k:"o",date:o.next.date,label:o.next.label,who:o.nom,col:ocolor(o),late:oLate(o),row:ostage(o)==="perdu"?"react":["repondu","qualification"].includes(ostage(o))?"calls":"props"}));
   const items=[...C,...O];
-  const rows=[{k:"relances",l:"Relances",c:"--c-relance"},{k:"calls",l:"Calls",c:"--c-qualif"},{k:"props",l:"Propositions",c:"--c-attente"},{k:"react",l:"Réactivations",c:"--c-react"}];
+  const rows=[{k:"relances",l:"Relances",c:"--c-relance"},{k:"tom",l:"Top of mind",c:"--c-conv"},{k:"calls",l:"Calls",c:"--c-qualif"},{k:"props",l:"Propositions",c:"--c-attente"},{k:"react",l:"Réactivations",c:"--c-react"}];
   const cell=(list,cls)=>`<div class="cell ${cls}">${list.slice(0,4).map(i=>`<button ${i.k==="c"?`data-open="${i.id}"`:`data-openo="${i.id}"`} class="${i.late?"is-late":""}" style="--c:var(${i.col})" title="${esc(i.who+" · "+(i.label||""))}" aria-label="${esc(i.who)}"></button>`).join("")}${list.length>4?`<em>+${list.length-4}</em>`:""}</div>`;
   let html=`<div class="tl" style="grid-template-columns:130px 52px repeat(${N},minmax(22px,1fr))"><div></div><div class="hd"><b class="late">!</b>retard</div>`+days.map(d=>{const dt=new Date(d+"T12:00");return`<div class="hd ${isWE(d)?"we":""} ${d===t?"today":""}"><b>${dt.getDate()}</b>${JOURS[dt.getDay()].slice(0,1)}</div>`}).join("");
   rows.forEach(r=>{const pool=items.filter(i=>i.row===r.k);html+=`<div class="lb"><i class="dot" style="--c:var(${r.c})"></i>${r.l}</div>`+cell(pool.filter(i=>i.date<t),"lt")+days.map(d=>cell(pool.filter(i=>i.date===d),isWE(d)?"we":"")).join("")});
@@ -906,7 +931,7 @@ function tagFilters(withBoard){
   const f=S.filters;
   const chip=(k,v,l)=>`<button class="pill" data-filter="${k}:${v}" aria-pressed="${f[k]===v}">${esc(l)}</button>`;
   return`<div class="toolbar"><input type="search" id="f-q" placeholder="Rechercher un nom, une entreprise, une note…" value="${esc(f.q)}">
-      <select id="f-chaleur" aria-label="Chaleur">${opt(CHALEURS,f.chaleur,"Toutes chaleurs")}</select>${withBoard?`<select id="f-board" aria-label="Board">${opt({prospect:"Prospection",pipe:"Pipeline"},f.board,"Tous les boards")}</select>`:""}</div>
+      <select id="f-chaleur" aria-label="Chaleur">${opt(CHALEURS,f.chaleur,"Toutes chaleurs")}</select>${withBoard?`<select id="f-board" aria-label="Board">${opt({prospect:"Prospection",tom:"Top of mind",pipe:"Pipeline"},f.board,"Tous les boards")}</select>`:""}</div>
     <div class="tags"><span class="label">Type</span>${Object.entries(TYPES).map(([k,l])=>chip("type",k,l)).join("")}</div>
     <div class="tags"><span class="label">Source</span>${Object.entries(SOURCES).map(([k,l])=>chip("source",k,l)).join("")}</div>`;
 }
@@ -926,13 +951,13 @@ function activationPanel(){
     ${fill}</section>`;
 }
 function vProspect(){
-  const list=filteredC().filter(c=>onBoard(c)||cboard(c)==="pipe");
+  const list=filteredC().filter(c=>onBoard(c)||cboard(c)!=="prospect");
   const cols=PROSPECT.map(s=>{const cs=list.filter(c=>cstage(c)===s.k).sort((a,b)=>((a.next&&a.next.date)||"9").localeCompare((b.next&&b.next.date)||"9"));
     return`<div class="col folder" data-drop="${s.k}">${colHead(s,cs.length)}${cs.map(pcardC).join("")}</div>`}).join("");
-  const conv=list.filter(c=>cboard(c)==="pipe").sort((a,b)=>(b.converti||b.maj||"").localeCompare(a.converti||a.maj||""));
-  const archive=`<div class="col archive folder" data-drop="converti">${colHead({l:"A répondu",c:"--c-conv",d:"Sort de la prospection. Créez une opportunité depuis la fiche si un besoin se confirme."},conv.length)}
-    ${conv.slice(0,40).map(c=>{const o=oppsOf(c)[0];return`<div class="arch" data-open="${c.id}"><i class="dot" style="--c:var(${o?ocolor(o):"--c-conv"})"></i><b>${esc(cname(c))}</b><small>${o?esc(olabel(o)):"Sans opportunité"}</small></div>`}).join("")}</div>`;
-  return head("Prospection <em>&amp; relances</em>","Glissez une carte : la prochaine relance se calcule toute seule. Quand un contact répond, il sort du board ; vous créez l'opportunité vous-même si un besoin se confirme.",`<button class="btn primary" data-act="new-contact">+ Contact</button>`)
+  const conv=list.filter(c=>cboard(c)!=="prospect").sort((a,b)=>(b.converti||b.maj||"").localeCompare(a.converti||a.maj||""));
+  const archive=`<div class="col archive folder" data-drop="converti">${colHead({l:"→ Top of mind",c:"--c-conv",d:"Réponse ou premier échange positif : la relation continue dans Top of mind."},conv.length)}
+    ${conv.slice(0,40).map(c=>{const o=oppsOf(c)[0];return`<div class="arch" data-open="${c.id}"><i class="dot" style="--c:var(${o?ocolor(o):"--c-conv"})"></i><b>${esc(cname(c))}</b><small>${esc(ZONE_L[zoneOf(c)])}</small></div>`}).join("")}</div>`;
+  return head("Prospection <em>&amp; relances</em>","Glissez une carte : la prochaine relance se calcule toute seule. Quand un contact répond, il passe en Top of mind.",`<button class="btn primary" data-act="new-contact">+ Contact</button>`)
    +legacyNotice()+activationPanel()+activeFilterNote()+tagFilters(false)+`<div class="board-wrap"><div class="board">${cols}${archive}</div></div>`;
 }
 function pcardC(c){
@@ -965,14 +990,28 @@ function vDues(){
    +`</div>`+(hidden?`<p class="muted" style="margin-top:16px;font-size:12.5px">${plural(hidden,"contact")} du backlog ou de « Ce mois-ci » ont une date passée : ils n'apparaissent pas ici tant qu'ils ne sont pas activés. <button class="lnk" data-actfilter="backlog">Voir la base</button></p>`:"");
 }
 
+/* ───────── TOP OF MIND ───────── */
+function vTom(){
+  const q=S.filters.q.trim().toLowerCase();
+  const list=S.contacts.filter(isTom).filter(c=>!q||[c.nom,c.studio,compteName(c),c.note].join(" ").toLowerCase().includes(q));
+  const due=list.filter(c=>c.next&&c.next.date&&c.next.date<=today()).length,none=list.filter(c=>!c.next||!c.next.date).length;
+  const cols=TOM.map(sg=>{const cs=list.filter(c=>tomSeg(c)===sg.k).sort((a,b)=>((a.next&&a.next.date)||"9").localeCompare((b.next&&b.next.date)||"9"));
+    return`<div class="col folder" data-tomdrop="${sg.k}">${colHead({l:sg.l,c:sg.c,d:sg.d+" · rappel par défaut tous les "+(sg.cad<45?Math.round(sg.cad/7)+" sem.":String(Math.round(sg.cad/30*10)/10).replace(".",",")+" mois")},cs.length)}${cs.map(pcardC).join("")}</div>`}).join("");
+  const toPipe=`<div class="col archive folder" data-tomdrop="pipe">${colHead({l:"Besoin concret → Pipeline",c:"--c-qualif",d:"Glissez une carte ici quand un projet réel apparaît : vous créez son opportunité."},"")}</div>`;
+  return head("Top <em>of mind</em>","Les personnes qui vous connaissent, sans besoin ouvert. L'objectif : rester présente dans leur esprit.",`<button class="btn primary" data-act="new-contact">+ Contact</button>`)
+   +activeFilterNote()+`<div class="qsum" style="margin-bottom:14px"><span><b>${list.length}</b> relations</span><span class="${due?"late":""}"><b>${due}</b> rappel${due>1?"s":""} dû${due>1?"s":""}</span>${none?`<span><b>${none}</b> sans rappel programmé</span>`:""}</div>`
+   +`<div class="toolbar"><input type="search" id="f-q" placeholder="Rechercher une personne, une entreprise…" value="${esc(S.filters.q)}"></div>`
+   +`<div class="board-wrap"><div class="board">${cols}${toPipe}</div></div>`;
+}
+
 /* ───────── PIPELINE (opportunités) ───────── */
 function filteredO(){const q=S.filters.q.trim().toLowerCase();return S.opps.filter(o=>!q||[o.nom,oCompteName(o),(oContact(o)||{}).nom,MISSIONS[o.mission]].join(" ").toLowerCase().includes(q))}
 function vPipeline(){
   const list=filteredO();
   const q=S.filters.q.trim().toLowerCase();
-  const waiting=S.contacts.filter(awaitingOpp).filter(c=>!q||[c.nom,c.studio,compteName(c)].join(" ").toLowerCase().includes(q)).sort((a,b)=>((a.next&&a.next.date)||"9").localeCompare((b.next&&b.next.date)||"9"));
+  const waiting=[]||S.contacts.filter(c=>!q||[c.nom,c.studio,compteName(c)].join(" ").toLowerCase().includes(q)).sort((a,b)=>((a.next&&a.next.date)||"9").localeCompare((b.next&&b.next.date)||"9"));
   const cols=PIPE.map(s=>{const os=list.filter(o=>ostage(o)===s.k).sort((a,b)=>pondere(b)-pondere(a));
-    const sum=os.reduce((t,o)=>t+(+o.valeur||0),0),pd=os.reduce((t,o)=>t+pondere(o),0),extra=s.k==="repondu"?waiting:[];
+    const sum=os.reduce((t,o)=>t+(+o.valeur||0),0),pd=os.reduce((t,o)=>t+pondere(o),0),extra=[];
     return`<div class="col folder" data-drop="${s.k}">${colHead(s,os.length+extra.length,sum&&s.k!=="perdu"?` · ${keur(sum)}${OPEN.includes(s.k)?" · pondéré "+keur(pd):""}`:"")}${extra.map(pcardC).join("")}${os.map(pcardO).join("")}</div>`}).join("");
   return head("Pipeline","Une carte = une opportunité (un besoin, une mission). Une même entreprise peut en avoir plusieurs.",`<button class="btn primary" data-act="new-opp">+ Opportunité</button>`)
    +legacyNotice()+activeFilterNote()+`<div class="toolbar"><input type="search" id="f-q" placeholder="Rechercher une opportunité, un account…" value="${esc(S.filters.q)}"></div>`
@@ -998,7 +1037,7 @@ function pcardO(o){
 /* ───────── ACCOUNTS ───────── */
 function vComptes(){
   const q=S.filters.q.trim().toLowerCase();
-  const order={actif:0,opportunite:1,prospection:2,dormant:3};
+  const order={pipeline:0,tom:1,prospection:2,dormant:3};
   const list=accounts().filter(a=>a.contacts.length||a.doc).filter(a=>!q||[a.nom,a.pays,...a.contacts.map(c=>c.nom)].join(" ").toLowerCase().includes(q))
     .sort((a,b)=>order[a.statut]-order[b.statut]||b.valeur-a.valeur);
   const multi=list.filter(a=>a.conv.length>1).length;
@@ -1010,7 +1049,7 @@ function acctCard(a){
   return`<article class="acct notched" data-openc="${esc(a.id)}">${notch("Ouvrir l'account",`data-openc="${esc(a.id)}"`)}
     <h3>${esc(a.nom)}</h3>
     <div class="meta">${esc([ACC_TYPES[a.type],a.pays].filter(Boolean).join(" · ")||"Type et pays à préciser")}</div>
-    <div class="row"><span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${stag(a.statut)}${a.contacts.length?heatDots(a.accHeat):""}</span><span class="val">${a.valeur?keur(a.valeur):""}</span></div>
+    <div class="row"><span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${stag(a.statut)}${a.ancien?`<span class="pill">Ancien client</span>`:""}${a.contacts.length?heatDots(a.accHeat):""}</span><span class="val">${a.valeur?keur(a.valeur):""}</span></div>
     <div class="row"><div class="avs">${a.contacts.slice(0,5).map(c=>avC(c,"sm")).join("")}</div><small class="muted">${plural(a.contacts.length,"contact")}${a.open.length?" · "+plural(a.open.length,"opportunité"):""}</small></div>
     <div class="row"><span class="muted">Dernier mouvement</span><span>${a.lastMove?ago(a.lastMove.d):"—"}</span></div>
     <div class="row"><span class="muted">Prochaine action</span><span class="${a.next&&a.next.date<today()?"late":""}">${a.next?rel(a.next.date):"—"}</span></div>
@@ -1027,14 +1066,14 @@ function vContacts(){
   const cnt=k=>S.contacts.filter(c=>actv(c)===k).length;
   const bulk=S.sel.size?`<div class="notice" style="position:sticky;top:12px;z-index:5"><span><b style="color:var(--fg)">${S.sel.size}</b> sélectionné(s) · passer en :</span><span class="actions">${Object.entries(ACT).map(([k,a])=>`<button class="btn sm" data-bulk="${k}"><i class="dot" style="--c:var(${a.c})"></i>${a.l}</button>`).join("")}<button class="btn sm ghost" data-act="sel-clear">Annuler</button></span></div>`:"";
   return head("Base <em>de contacts</em>",`${S.contacts.length} personnes · board limité à ${LIM.accounts} comptes actifs et ${LIM.week} activations par semaine`,`<button class="btn primary" data-act="new-contact">+ Contact</button>`)
-   +`<div class="tags"><span class="label">Activation</span>${Object.entries(ACT).map(([k,a])=>`<button class="pill" data-filter="act:${k}" aria-pressed="${S.filters.act===k}"><i class="dot" style="--c:var(${a.c})"></i>${a.l} · ${cnt(k)}</button>`).join("")}<button class="pill" data-filter="act:pipeline" aria-pressed="${S.filters.act==="pipeline"}">Pipeline · ${cnt("pipeline")}</button></div>`
+   +`<div class="tags"><span class="label">Activation</span>${Object.entries(ACT).map(([k,a])=>`<button class="pill" data-filter="act:${k}" aria-pressed="${S.filters.act===k}"><i class="dot" style="--c:var(${a.c})"></i>${a.l} · ${cnt(k)}</button>`).join("")}<button class="pill" data-filter="act:tom" aria-pressed="${S.filters.act==="tom"}"><i class="dot" style="--c:var(--c-conv)"></i>Top of mind · ${cnt("tom")}</button><button class="pill" data-filter="act:pipeline" aria-pressed="${S.filters.act==="pipeline"}"><i class="dot" style="--c:var(--c-qualif)"></i>Pipeline · ${cnt("pipeline")}</button></div>`
    +activeFilterNote()+tagFilters(true)+bulk
    +`<div class="table-wrap"><table><thead><tr><th><input type="checkbox" id="sel-all" aria-label="Tout sélectionner" ${list.length&&list.every(c=>S.sel.has(c.id))?"checked":""}></th>${th("nom","Nom")}${th("studio","Entreprise")}<th>Poste</th><th>Activation</th><th>Type</th><th>Source</th><th>Board</th><th>Chaleur</th>${th("last","Dernier contact")}<th>Prochaine action</th>${th("next","Date")}<th>Pays</th></tr></thead><tbody>
    ${list.map(c=>{const k2=compteKey(c),lc=lastContact(c),ex=c.exemple?' <span style="color:var(--faint);font-size:11px">exemple</span>':"";
      return`<tr data-open="${c.id}"><td data-nosel><input type="checkbox" class="sel" value="${c.id}" ${S.sel.has(c.id)?"checked":""} aria-label="Sélectionner"></td><td><span class="nm"><i class="dot" style="--c:var(${ccolor(c)})"></i>${esc(cname(c))}</span></td>
      <td>${k2?`<button class="lnk" data-openc="${esc(k2)}">${esc(compteName(c))}</button>${siblings(c).length?` <span class="pill">+${siblings(c).length}</span>`:""}`:"—"}${ex}</td>
-     <td>${esc(c.poste||"—")}</td><td>${ACT[actv(c)]?`<span class="tag" style="--c:var(${ACT[actv(c)].c})"><span class="dot"></span>${ACT[actv(c)].l}</span>`:"Pipeline"}</td><td>${TYPES[c.type]?`<span class="pill">${TYPES[c.type]}</span>`:"—"}</td><td>${SOURCES[c.source]?`<span class="pill">${SOURCES[c.source]}</span>`:"—"}</td>
-     <td>${cboard(c)==="pipe"?"Pipeline":"Prospection"}</td><td>${heatDots(chaleur(c))}</td><td>${lc?ago(lc.d):"—"}</td>
+     <td>${esc(c.poste||"—")}</td><td>${ACT[actv(c)]?`<span class="tag" style="--c:var(${ACT[actv(c)].c})"><span class="dot"></span>${ACT[actv(c)].l}</span>`:esc(ZONE_L[zoneOf(c)])}</td><td>${TYPES[c.type]?`<span class="pill">${TYPES[c.type]}</span>`:"—"}</td><td>${SOURCES[c.source]?`<span class="pill">${SOURCES[c.source]}</span>`:"—"}</td>
+     <td>${ZONE_L[zoneOf(c)]}</td><td>${heatDots(chaleur(c))}</td><td>${lc?ago(lc.d):"—"}</td>
      <td>${esc(c.next&&c.next.label||(cboard(c)==="pipe"?"Voir l'opportunité":"—"))}</td><td class="${cLate(c)&&cboard(c)==="prospect"?"late":""}">${c.next&&c.next.date?rel(c.next.date):"—"}</td><td>${esc(c.pays||"")}</td></tr>`}).join("")
      ||`<tr><td colspan="13" class="empty" style="padding:24px 14px">Aucun contact ne correspond à ces filtres.</td></tr>`}
    </tbody></table></div>`;
@@ -1073,7 +1112,7 @@ function vForecast(){
 
   /* conversions */
   const contacted=S.contacts.filter(c=>(c.relances||0)>0||cstage(c)!=="a_contacter").length;
-  const replied=Math.max(S.contacts.filter(c=>cboard(c)==="pipe").length,new Set(S.opps.map(o=>o.contactId).filter(Boolean)).size);
+  const replied=Math.max(S.contacts.filter(c=>cboard(c)!=="prospect").length,new Set(S.opps.map(o=>o.contactId).filter(Boolean)).size);
   const nOpp=S.opps.length,calls=S.opps.filter(o=>reach(o)>=3).length,props=S.opps.filter(o=>reach(o)>=4).length,signs=S.opps.filter(o=>ostage(o)==="signe").length;
   const st=[{k:"rep",l:"Contacté → réponse",a:replied,b:contacted,tip:"Messages plus courts et plus personnalisés ; testez un autre canal ou un autre angle."},
     {k:"call",l:"Réponse → call",a:calls,b:Math.max(replied,nOpp),tip:"Proposez un créneau précis dès la première réponse."},
@@ -1215,7 +1254,7 @@ function buildTab(rows,tab,defT,defS){
     const sent=dates.length||(!notYet&&(/envoy|relanc|attente/.test(st)||(/envoy|sent/.test(tabN)&&!/a envoyer|to send/.test(tabN))));
     /* « répondu », « intéressé »… mais jamais « pas de réponse », « sans réponse », « non intéressé » */
     const negative=/\b(pas|sans|aucune?|non|jamais|no)\b|attente de reponse/.test(st);
-    if(!negative&&/(\ba repondu\b|^repondu|reponse recue|\binteresse|call (fait|cale|prevu))/.test(st)){c.stage="pipeline";c.converti=today();c._opp=true;c.next={date:today(),label:"Qualifier le besoin · créer une opportunité si besoin réel"}}
+    if(!negative&&/(\ba repondu\b|^repondu|reponse recue|\binteresse|call (fait|cale|prevu))/.test(st)){c.stage="tom";c.tomSeg="echange";c.converti=today();c._opp=true;c.next={date:addDays(today(),7),label:"Garder le lien · proposer un échange"}}
     else if(!sent){c.stage="a_contacter";c.next={date:today(),label:"Envoyer le premier message"};c.relances=0}
     else{const n=Math.max(1,dates.length);c.relances=n;const rr=rythme(c,n,last||today());c.stage=rr.stage;c.next=rr.next;
       if(/a relancer|relancer/.test(st)&&rr.stage!=="sommeil"){c.stage=n>1?"relance":"contacte";c.next={date:today(),label:"Relance "+n}}}
@@ -1323,7 +1362,7 @@ function studioHint(name,selfId){
 
 /* ───────── Fiche contact ───────── */
 function drawerContact(c){
-  const pros=cboard(c)==="prospect",k=compteKey(c),acc=k?accounts().find(a=>a.id===k):null,sibs=siblings(c),os=oppsOf(c),lc=lastContact(c);
+  const z=zoneOf(c),pros=z==="prospect",k=compteKey(c),acc=k?accounts().find(a=>a.id===k):null,sibs=siblings(c),os=oppsOf(c),lc=lastContact(c);
   const g=gcal(c.next&&c.next.label,c.next&&c.next.date,cname(c),[c.poste,compteName(c),c.email,c.linkedin,tipFor(c),zoneHint(c)].filter(Boolean).join("\n"));
   const evBtn=(e,l,col)=>`<button class="btn sm" data-cev="${e}" data-id="${c.id}"><i class="dot" style="--c:var(${col})"></i>${l}</button>`;
   return`<div class="scrim" data-close></div><aside class="drawer" role="dialog" aria-label="Fiche contact">
@@ -1333,14 +1372,20 @@ function drawerContact(c){
     <button class="round" data-close aria-label="Fermer">×</button></div>
   <div class="drawer-b">
     ${pros?`<div><p class="label" style="margin:0 0 8px">Niveau d'activation</p><div class="seg-f" role="group" aria-label="Niveau d'activation">${Object.entries(ACT).map(([k,a])=>`<button data-setact="${k}" data-id="${c.id}" aria-pressed="${actv(c)===k}">${a.l}</button>`).join("")}</div></div>`:""}
-    <div class="facts"><div><span class="label">Board</span><b>${pros?(onBoard(c)?"Prospection":"Base · "+ACT[actv(c)].l):"Pipeline"}</b></div>
+    <div class="facts"><div><span class="label">Board</span><b>${pros?(onBoard(c)?"Prospection":"Base · "+ACT[actv(c)].l):ZONE_L[z]}</b></div>
       <div><span class="label">Dernier contact</span><b>${lc?ago(lc.d):"—"}</b></div>
-      <div><span class="label">Prochaine action</span><b class="${pros&&cLate(c)?"late":""}">${c.next&&c.next.date?rel(c.next.date):pros?"—":"Dans l'opportunité"}</b></div></div>
+      <div><span class="label">Prochaine action</span><b class="${pros&&cLate(c)?"late":""}">${c.next&&c.next.date?rel(c.next.date):z==="pipeline"?"Dans l'opportunité":"—"}</b></div></div>
     <div class="next"><span class="label">Prochaine action</span>
       <div class="row"><input id="c-nextlabel" value="${esc(c.next&&c.next.label||"")}" placeholder="Ex. relance avec le nouveau projet hôtel"><input type="date" id="c-nextdate" value="${c.next&&c.next.date||""}" aria-label="Date"></div>
       <div class="tip">${esc(tipFor(c))}${zoneHint(c)?"<br>"+esc(zoneHint(c)):""}</div>
       ${g?`<a class="btn sm" href="${g}" target="_blank" rel="noopener" style="align-self:flex-start">Ajouter à Google Agenda</a>`:""}</div>
-    ${pros?`<div><p class="label" style="margin:0 0 8px">Ce qui vient de se passer</p><div class="steps">${evBtn("envoye",cstage(c)==="a_contacter"||DORMANT_C.includes(cstage(c))?"Message envoyé":"Relance envoyée","--c-relance")}${evBtn("repondu","A répondu","--c-conv")}${evBtn("sommeil","Mettre en sommeil","--c-sommeil")}${evBtn("reactiver","À réactiver","--c-react")}</div></div>`:""}
+    ${pros?`<div><p class="label" style="margin:0 0 8px">Ce qui vient de se passer</p><div class="steps">${evBtn("envoye",cstage(c)==="a_contacter"||DORMANT_C.includes(cstage(c))?"Message envoyé":"Relance envoyée","--c-relance")}${evBtn("repondu","A répondu → Top of mind","--c-conv")}${evBtn("sommeil","Mettre en sommeil","--c-sommeil")}${evBtn("reactiver","À réactiver","--c-react")}</div></div>`:""}
+    ${z==="tom"?`<div><p class="label" style="margin:0 0 8px">Top of mind · ${esc(TOM_SEG[tomSeg(c)].l)}</p>
+      <div class="steps">${evBtn("touch","Pris des nouvelles ✓","--c-conv")}${[[14,"2 semaines"],[30,"1 mois"],[60,"2 mois"],[90,"3 mois"]].map(([n,l])=>`<button class="btn sm" data-remind="${n}" data-id="${c.id}">Rappel dans ${l}</button>`).join("")}</div>
+      <div class="form" style="margin-top:12px"><label class="field"><span class="label">Groupe</span><select id="c-tomseg">${opt(Object.fromEntries(TOM.map(t=>[t.k,t.l])),tomSeg(c))}</select></label>
+        <label class="field"><span class="label">Rythme des rappels</span><select id="c-cadence">${opt(CAD_L,String(cadence(c)))}</select></label></div>
+      <div class="actions" style="margin-top:12px"><button class="btn sm primary" data-act="new-opp" data-contact="${c.id}">Besoin concret → Pipeline</button><button class="btn sm ghost" data-cev="prospect" data-id="${c.id}">Repasser en prospection</button></div></div>`:""}
+    ${z==="pipeline"&&os.some(o=>ostage(o)==="signe"&&!projectDone(o))?`<div class="alert"><span>Projet signé en cours. Quand il sera terminé, ${esc(c.nom||"ce contact")} reviendra en Top of mind comme ancien client.</span><button class="btn sm" data-done-c="${c.id}">Projet terminé → Top of mind</button></div>`:""}
     <div><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px"><span class="label">Opportunités · ${os.length}</span><button class="btn sm" data-act="new-opp" data-contact="${c.id}">+ Opportunité</button></div>
       <div class="sibs">${os.map(o=>`<div class="sib" data-openo="${o.id}">${avO(o,"sm")}<div class="grow"><b>${esc(o.nom)}</b> <span class="muted">${o.valeur?eur(o.valeur)+" · "+proba(o)+" %":""}</span></div>${otag(o)}</div>`).join("")||`<div class="muted" style="font-size:12.5px">Aucune pour l'instant.</div>`}</div></div>
     ${acc?`<div><p class="label" style="margin:0 0 8px">Même account · ${esc(acc.nom)}</p>
@@ -1559,7 +1604,7 @@ function vParams(){
 /* ───────── Rendu ───────── */
 function render(){
   buildIndex();renderNav();
-  const V={params:vParams,today:vToday,dues:vDues,prospect:vProspect,pipeline:vPipeline,comptes:vComptes,contacts:vContacts,projets:vProjets,forecast:vForecast,import:vImport}[S.view]||vToday;
+  const V={params:vParams,tom:vTom,today:vToday,dues:vDues,prospect:vProspect,pipeline:vPipeline,comptes:vComptes,contacts:vContacts,projets:vProjets,forecast:vForecast,import:vImport}[S.view]||vToday;
   const keep=S.view==="import"&&document.getElementById("i-preview");
   if(!keep)document.getElementById("main").innerHTML=V();
   renderLayer();
@@ -1590,6 +1635,9 @@ document.addEventListener("click",async e=>{
   if(t.closest("[data-bk-cancel]")){S.bk.confirm="";render();return}
   const bkr=t.closest("[data-bk-restore]");if(bkr){await restoreBackup(bkr.dataset.bkRestore);return}
   const bkd=t.closest("[data-bk-dl]");if(bkd){await downloadBackup(bkd.dataset.bkDl);return}
+  const rm=t.closest("[data-remind]");if(rm){const c=S.contacts.find(x=>x.id===rm.dataset.id);if(!c)return;const f=await saveContact(true);if(f===null)return;
+    await save("contacts",c.id,{next:{date:addDays(today(),+rm.dataset.remind),label:"Prendre des nouvelles"}});toast("Rappel programmé : "+rel(addDays(today(),+rm.dataset.remind)).toLowerCase());return}
+  const dn=t.closest("[data-done-c]");if(dn){const o=S.opps.find(x=>x.contactId===dn.dataset.doneC&&ostage(x)==="signe"&&!projectDone(x));if(o){await projectFinished(o);closeLayer()}return}
   const sa=t.closest("[data-setact]");if(sa){await setActivation([sa.dataset.id],sa.dataset.setact);return}
   const bk=t.closest("[data-bulk]");if(bk){await setActivation([...S.sel],bk.dataset.bulk);return}
   const af=t.closest("[data-actfilter]");if(af){S.filters.act=af.dataset.actfilter;S._keepAct=true;go("contacts");return}
@@ -1676,6 +1724,23 @@ function fillSuggestions(){
   for(const c of pool){if(picks.length>=room)break;const k=compteKey(c)||c.id;if(!accs.has(k)&&accs.size>=LIM.accounts)continue;accs.add(k);picks.push(c)}
   return{room,picks};
 }
+async function projectFinished(o){
+  if(!o||o.termine)return;
+  await save("opps",o.id,{termine:true,maj:today()});
+  const c=IDX.contact[o.contactId];
+  if(c){const h=(c.hist||[]).slice();h.unshift({d:today(),t:"Projet « "+o.nom+" » terminé · ancien client"});
+    await save("contacts",c.id,{stage:"tom",tomSeg:"ancien",type:"ancien_client",activation:"",next:{date:addDays(today(),30),label:"Prendre des nouvelles après le projet"},hist:h.slice(0,60),maj:today()})}
+  toast((c?cname(c):"Le contact")+" revient en Top of mind · ancien client · rappel dans 1 mois","xp");
+}
+async function backToTom(o,reason){
+  const c=IDX.contact[o.contactId];if(!c)return;
+  if(S.opps.some(x=>x.id!==o.id&&x.contactId===c.id&&OPEN.includes(ostage(x))))return;
+  const h=(c.hist||[]).slice();h.unshift({d:today(),t:"Besoin reporté · retour en Top of mind"});
+  await save("contacts",c.id,{stage:"tom",tomSeg:reason,activation:"",next:{date:addDays(today(),60),label:"Reprendre contact (besoin reporté)"},hist:h.slice(0,60),maj:today()});
+}
+async function onProjectStage(p,stage){
+  if(["livre","facture","paye"].includes(stage)&&p.oppId){const o=S.opps.find(x=>x.id===p.oppId);if(o&&!o.termine)await projectFinished(o)}
+}
 async function saveObj(o,msg){S.obj=o;render();if(S.db){try{await S.db.doc("reglages/objectifs").set(o);toast(msg)}catch(_){toast("Non enregistré. Réessayez.")}}}
 async function runC(c,ev,quiet,keepNext){
   const opts={};const nd=document.getElementById("c-nextdate");
@@ -1691,7 +1756,7 @@ async function runO(o,ev,quiet,keepNext){
   const p=applyO(o,ev);if(keepNext)p.next={date:keepNext.date,label:keepNext.lt||!p.next?keepNext.label:p.next.label};
   if(!(await save("opps",o.id,p)))return false;
   if(ev==="signe"){const pid=uid();await save("projets",pid,{titre:o.nom,client:oCompteName(o),oppId:o.id,montant:+o.valeur||0,stage:"production",demarrage:o.dateDemarrage||"",services:[],cree:today(),exemple:!!o.exemple},true);toast("Signé ! Le projet est créé dans « Projets ».","xp")}
-  else if(ev==="perdu"){open("opp",o.id);toast("Notez la raison dans la fiche");setTimeout(()=>{const r=document.getElementById("o-raison");if(r)r.focus()},80)}
+  else if(ev==="perdu"){await backToTom(o,"reporte");open("opp",o.id);toast("Notez la raison dans la fiche");setTimeout(()=>{const r=document.getElementById("o-raison");if(r)r.focus()},80)}
   else if(!quiet)toast(p.next?"Prochaine étape : "+rel(p.next.date).toLowerCase():"Enregistré");
   return true;
 }
@@ -1715,7 +1780,7 @@ async function quickSave(kind){
     let cid=val("q-compte");if(cid.startsWith("v:")){const a=accounts().find(x=>x.id===cid);cid=await materialize(a)}
     const id=uid();const contactId=val("q-contact");
     if(await save("opps",id,{nom,compteId:cid,contactId,mission:val("q-mission"),valeur:+val("q-valeur")||0,stage:"repondu",reach:1,next:{date:addDays(today(),3),label:O_NEXT.repondu[1]},hist:[{d:today(),t:"Opportunité ouverte"}],cree:today(),maj:today()},true)){
-      const c=S.contacts.find(x=>x.id===contactId);if(c&&cboard(c)==="prospect")await save("contacts",c.id,{stage:"pipeline",converti:today(),next:null});
+      const c=S.contacts.find(x=>x.id===contactId);if(c&&cboard(c)==="prospect")await save("contacts",c.id,{stage:"tom",tomSeg:c.tomSeg||"echange",activation:"",converti:c.converti||today(),next:null});
       const target=(S.L&&S.L.d&&S.L.d.stage)||"repondu";
       if(target!=="repondu")await runO({id,nom,compteId:cid,contactId,valeur:+val("q-valeur")||0,stage:"repondu",reach:1,hist:[{d:today(),t:"Opportunité ouverte"}]},target,true);
       toast(target==="repondu"?"Opportunité créée":"Opportunité créée en « "+O_STAGE[target].l+" »");if(target!=="perdu")open("opp",id)}
@@ -1725,6 +1790,7 @@ async function saveContact(quiet){
   const c=S.contacts.find(x=>x.id===S.L.id);if(!c)return null;
   const f={nom:val("c-nom").trim(),poste:val("c-poste").trim(),studio:val("c-studio").trim(),type:val("c-type"),source:val("c-source"),email:val("c-email").trim(),linkedin:val("c-linkedin").trim(),tel:val("c-tel").trim(),
     chaleur:val("c-chaleur"),pays:val("c-pays").trim(),zone:val("c-zone"),note:val("c-note"),maj:today()};
+  if(document.getElementById("c-tomseg")){f.tomSeg=val("c-tomseg");f.cadence=+val("c-cadence")||0;if(f.tomSeg==="ancien")f.type="ancien_client";if(f.tomSeg==="apporteur")f.type="apporteur"}
   if(f.email&&S.contacts.some(x=>x.id!==c.id&&x.email&&x.email.toLowerCase()===f.email.toLowerCase())){toast("Un contact avec ce mail existe déjà.");return null}
   f.compteId=f.studio?await ensureCompte(f.studio):"";
   const nl=val("c-nextlabel").trim(),nd=val("c-nextdate");
@@ -1768,7 +1834,8 @@ async function saveProjet(){
   if(body.stage==="paye"&&!body.paye)body.paye=today();
   if(!body.titre){toast("Donnez un nom au projet.");return}
   const isNew=S.L.id==="new",id=isNew?uid():S.L.id;
-  if(await save("projets",id,isNew?{...body,cree:today()}:body,isNew)){toast(isNew?"Projet créé":"Enregistré");closeLayer()}
+  const before=isNew?null:S.projets.find(x=>x.id===id);
+  if(await save("projets",id,isNew?{...body,cree:today()}:body,isNew)){toast(isNew?"Projet créé":"Enregistré");closeLayer();if(before&&before.stage!==body.stage)await onProjectStage({...before,...body},body.stage)}
 }
 /* Anciennes fiches dont l'étape de pipeline était portée par le contact → opportunités */
 async function migrateLegacy(){
@@ -1777,7 +1844,7 @@ async function migrateLegacy(){
     let cid=compteKey(c);if(cid&&cid.startsWith("v:"))cid=await ensureCompte(c.studio);
     const st=map[c.legacy]||c.legacy;
     const id=await newOppFor({...c,compteId:cid},cid,{stage:st,reach:RANK[st]||1,valeur:+c.montant||0,nego:!!c.nego,raison:c.raison||"",next:c.next||null,exemple:!!c.exemple,hist:(c.hist||[]).filter(h=>!/^Premier|^Relance|^Fiche/.test(h.t))});
-    if(id){await save("contacts",c.id,{stage:"pipeline",compteId:cid||"",next:null});n++}}
+    if(id){await save("contacts",c.id,{stage:"tom",compteId:cid||"",next:null});n++}}
   toast(n+" opportunité(s) créée(s)");
 }
 document.addEventListener("keydown",e=>{if(e.key==="Enter"&&e.target.classList&&e.target.classList.contains("title-edit")){e.preventDefault();const b=document.querySelector('.drawer [data-act^="save-"]');if(b)b.click();return}if(e.key==="Escape"&&S.L)closeLayer()});
@@ -1803,15 +1870,20 @@ document.addEventListener("dragstart",e=>{const c=e.target.closest&&e.target.clo
 document.addEventListener("dragend",()=>{document.querySelectorAll(".dragging,.over").forEach(x=>x.classList.remove("dragging","over"))});
 document.addEventListener("dragover",e=>{
   const d=e.target.closest&&e.target.closest("#drop");if(d){e.preventDefault();d.classList.add("over");return}
-  if(!drag)return;const sel=drag.startsWith("p:")?"[data-pdrop]":"[data-drop]";const col=e.target.closest&&e.target.closest(sel);if(!col)return;
+  if(!drag)return;const sel=drag.startsWith("p:")?"[data-pdrop]":"[data-drop],[data-tomdrop]";const col=e.target.closest&&e.target.closest(sel);if(!col)return;
   e.preventDefault();document.querySelectorAll(".over").forEach(x=>x!==col&&x.classList.remove("over"));col.classList.add("over")});
 document.addEventListener("drop",async e=>{
   const d=e.target.closest&&e.target.closest("#drop");if(d){e.preventDefault();d.classList.remove("over");const f=e.dataTransfer.files[0];if(f)readFile(f);return}
   if(!drag)return;const[k,id]=drag.split(":");drag=null;
-  if(k==="p"){const col=e.target.closest("[data-pdrop]");if(!col)return;e.preventDefault();const p=S.projets.find(x=>x.id===id),s=col.dataset.pdrop;if(!p||p.stage===s)return;const patch={stage:s};if(s==="facture"&&!p.facture)patch.facture=today();if(s==="paye"&&!p.paye)patch.paye=today();await save("projets",p.id,patch);toast((PSTAGES.find(x=>x.k===s)||{}).l);return}
+  if(k==="p"){const col=e.target.closest("[data-pdrop]");if(!col)return;e.preventDefault();const p=S.projets.find(x=>x.id===id),s=col.dataset.pdrop;if(!p||p.stage===s)return;const patch={stage:s};if(s==="facture"&&!p.facture)patch.facture=today();if(s==="paye"&&!p.paye)patch.paye=today();await save("projets",p.id,patch);toast((PSTAGES.find(x=>x.k===s)||{}).l);await onProjectStage(p,s);return}
+  const tcol=e.target.closest("[data-tomdrop]");
+  if(tcol&&k==="c"){e.preventDefault();tcol.classList.remove("over");const c=S.contacts.find(x=>x.id===id);if(!c)return;const sg=tcol.dataset.tomdrop;
+    if(sg==="pipe"){open("quick",null,{kind:"opp",d:{contactId:c.id,compteId:compteKey(c),stage:"repondu",nom:compteName(c)}});return}
+    if(tomSeg(c)===sg)return;const patch={tomSeg:sg,cadence:0,maj:today()};if(sg==="ancien")patch.type="ancien_client";if(sg==="apporteur")patch.type="apporteur";
+    if(await save("contacts",c.id,patch))toast(cname(c)+" → "+TOM_SEG[sg].l);return}
   const col=e.target.closest("[data-drop]");if(!col)return;e.preventDefault();col.classList.remove("over");const s=col.dataset.drop;
   if(k==="c"&&O_STAGE[s]&&s!=="repondu"){const c=S.contacts.find(x=>x.id===id);if(!c)return;open("quick",null,{kind:"opp",d:{contactId:c.id,compteId:compteKey(c),stage:s,nom:compteName(c)}});return}
-  if(k==="c"){const c=S.contacts.find(x=>x.id===id);if(!c||!C_DROP[s])return;if(cstage(c)===s&&s!=="relance")return;if(s==="converti"&&cboard(c)==="pipe")return;await runC(c,C_DROP[s])}
+  if(k==="c"){const c=S.contacts.find(x=>x.id===id);if(!c||!C_DROP[s])return;if(cstage(c)===s&&s!=="relance")return;if(s==="converti"&&cboard(c)!=="prospect")return;await runC(c,C_DROP[s])}
   if(k==="o"){const o=S.opps.find(x=>x.id===id);if(!o||!O_STAGE[s]||ostage(o)===s)return;await runO(o,s)}
 });
 
