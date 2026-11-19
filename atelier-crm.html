@@ -1437,10 +1437,12 @@ function renderLayer(){
   else if(st.t==="compte"){const a=accounts().find(x=>x.id===st.id);if(!a){if(Date.now()-(st.at||0)<6000){if(!L.dataset.k.startsWith("wait")){L.innerHTML="";L.dataset.k="wait"}return}S.L=null;return renderLayer()}key="a"+a.id+JSON.stringify(a.doc||{}).length+a.contacts.map(c=>c.id+c.stage+(c.maj||"")).join()+a.opps.map(o=>o.id+o.stage+(o.maj||"")).join();if(L.dataset.k===key)return;html=drawerCompte(a)}
   else if(st.t==="opp"){const o=S.opps.find(x=>x.id===st.id);if(!o){if(Date.now()-(st.at||0)<6000){if(!L.dataset.k.startsWith("wait")){L.innerHTML="";L.dataset.k="wait"}return}S.L=null;return renderLayer()}key="o"+o.id+(o.maj||"")+(o.hist||[]).length+o.stage+(o.nego?1:0)+JSON.stringify(o).length;if(L.dataset.k===key)return;html=drawerOpp(o)}
   else if(st.t==="projet"){const p=st.id==="new"?st.d:S.projets.find(x=>x.id===st.id);if(!p){if(Date.now()-(st.at||0)<6000){if(!L.dataset.k.startsWith("wait")){L.innerHTML="";L.dataset.k="wait"}return}S.L=null;return renderLayer()}key="p"+st.id;if(L.dataset.k===key)return;html=drawerProjet(p,st.id==="new")}
-  L.innerHTML=html;L.dataset.k=key;
+  const ent=st.t+":"+st.id,keepDirty=L.dataset.ent===ent?S.dirty:{};
+  L.innerHTML=html;L.dataset.k=key;L.dataset.ent=ent;S.dirty=keepDirty;
+  for(const[id,v]of Object.entries(keepDirty)){const el=document.getElementById(id);if(el){if(el.type==="checkbox")el.checked=v;else el.value=v}}
 }
-const open=(t,id,extra={})=>{S.L={t,id,at:Date.now(),...extra};document.getElementById("layer").dataset.k="";renderLayer()};
-const closeLayer=()=>{S.L=null;renderLayer()};
+const open=(t,id,extra={})=>{S.dirty={};S.L={t,id,at:Date.now(),...extra};document.getElementById("layer").dataset.k="";renderLayer()};
+const closeLayer=()=>{S.L=null;S.dirty={};renderLayer()};
 
 /* ───────── Interactions ───────── */
 document.addEventListener("click",async e=>{
@@ -1461,8 +1463,9 @@ document.addEventListener("click",async e=>{
     const q=quest({k,x});const row=qd.closest(".q");if(row)row.classList.add("gone");
     setTimeout(async()=>{const ok=k==="c"?await runC(x,q.ev,true):await runO(x,q.ev,true);if(ok)toast("+"+q.xp+" pt"+(q.xp>1?"s":"")+" · "+q.t,"xp")},220);return}
   const pr=t.closest("[data-principal]");if(pr){await setPrincipal(S.L.id,pr.dataset.principal);return}
-  const cev=t.closest("[data-cev]");if(cev){const c=S.contacts.find(x=>x.id===cev.dataset.id);if(c)await runC(c,cev.dataset.cev);return}
-  const oev=t.closest("[data-oev]");if(oev){const o=S.opps.find(x=>x.id===oev.dataset.id);if(o)await runO(o,oev.dataset.oev);return}
+  const cev=t.closest("[data-cev]");if(cev){const c=S.contacts.find(x=>x.id===cev.dataset.id);if(!c)return;const f=await saveContact(true);if(f===null)return;await runC({...c,...f},cev.dataset.cev);return}
+  const oev=t.closest("[data-oev]");if(oev){const o=S.opps.find(x=>x.id===oev.dataset.id);if(!o)return;const typed=S.dirty&&("o-nextlabel" in S.dirty||"o-nextdate" in S.dirty);
+    const b=await saveOpp(true);if(b===null)return;await runO({...o,...b},oev.dataset.oev,false,typed&&b.next&&!["signe","perdu"].includes(oev.dataset.oev)?b.next:null);return}
   const sn=t.closest("[data-snooze]");if(sn){const[k,id]=sn.dataset.snooze.split(":");const x=(k==="c"?S.contacts:S.opps).find(y=>y.id===id);
     if(x&&x.next){await save(k==="c"?"contacts":"opps",x.id,{next:{...x.next,date:addDays(x.next.date<today()?today():x.next.date,3)}});toast("Reporté de 3 jours")}return}
   const oc=t.closest("[data-openc]");if(oc){e.preventDefault();open("compte",oc.dataset.openc);return}
@@ -1537,8 +1540,8 @@ async function runC(c,ev,quiet){
   if(!quiet)toast(p.next?"Prochaine action : "+rel(p.next.date).toLowerCase():"Enregistré");
   return true;
 }
-async function runO(o,ev,quiet){
-  const p=applyO(o,ev);
+async function runO(o,ev,quiet,keepNext){
+  const p=applyO(o,ev);if(keepNext)p.next=keepNext;
   if(!(await save("opps",o.id,p)))return false;
   if(ev==="signe"){const pid=uid();await save("projets",pid,{titre:o.nom,client:oCompteName(o),oppId:o.id,montant:+o.valeur||0,stage:"production",demarrage:o.dateDemarrage||"",services:[],cree:today(),exemple:!!o.exemple},true);toast("Signé ! Le projet est créé dans « Projets ».","xp")}
   else if(ev==="perdu"){open("opp",o.id);toast("Notez la raison dans la fiche");setTimeout(()=>{const r=document.getElementById("o-raison");if(r)r.focus()},80)}
@@ -1569,15 +1572,16 @@ async function quickSave(kind){
       toast("Opportunité créée");open("opp",id)}
   }
 }
-async function saveContact(){
-  const c=S.contacts.find(x=>x.id===S.L.id);if(!c)return;
+async function saveContact(quiet){
+  const c=S.contacts.find(x=>x.id===S.L.id);if(!c)return null;
   const f={nom:val("c-nom").trim(),poste:val("c-poste").trim(),studio:val("c-studio").trim(),type:val("c-type"),source:val("c-source"),email:val("c-email").trim(),linkedin:val("c-linkedin").trim(),tel:val("c-tel").trim(),
     chaleur:val("c-chaleur"),pays:val("c-pays").trim(),zone:val("c-zone"),note:val("c-note"),maj:today()};
-  if(f.email&&S.contacts.some(x=>x.id!==c.id&&x.email&&x.email.toLowerCase()===f.email.toLowerCase())){toast("Un contact avec ce mail existe déjà.");return}
+  if(f.email&&S.contacts.some(x=>x.id!==c.id&&x.email&&x.email.toLowerCase()===f.email.toLowerCase())){toast("Un contact avec ce mail existe déjà.");return null}
   f.compteId=f.studio?await ensureCompte(f.studio):"";
   const nl=val("c-nextlabel").trim(),nd=val("c-nextdate");
   if(nd||nl)f.next={label:nl||"Relance",date:nd||today()};
-  if(await save("contacts",c.id,f)){toast("Enregistré");closeLayer()}
+  if(!(await save("contacts",c.id,f)))return null;
+  S.dirty={};if(!quiet){toast("Enregistré");closeLayer()}return f;
 }
 async function materialize(a){
   if(!a)return"";if(a.doc)return a.doc.id;
@@ -1598,14 +1602,15 @@ async function setPrincipal(key,cid){
   const cur=a.doc&&a.doc.principal;
   if(await save("comptes",id,{principal:cur===cid?"":cid})){toast(cur===cid?"Contact principal retiré":"Contact principal défini");if(key!==id)open("compte",id)}
 }
-async function saveOpp(){
-  const o=S.opps.find(x=>x.id===S.L.id);if(!o)return;
+async function saveOpp(quiet){
+  const o=S.opps.find(x=>x.id===S.L.id);if(!o)return null;
   const pr=val("o-proba");
   const body={nom:val("o-nom").trim()||o.nom,contactId:val("o-contact"),mission:val("o-mission"),valeur:+val("o-valeur")||0,proba:pr===""?null:Math.max(0,Math.min(100,+pr)),categorie:val("o-cat"),confiance:val("o-conf"),
     dateSignature:val("o-dsign"),dateDemarrage:val("o-dstart"),risque:val("o-risque"),notes:val("o-notes"),maj:today()};
   const nl=val("o-nextlabel").trim(),nd=val("o-nextdate");body.next=nd||nl?{label:nl||"Suivi",date:nd||today()}:null;
   if(document.getElementById("o-raison")){body.raison=val("o-raison");body.raisonNote=val("o-raisonNote").trim()}
-  if(await save("opps",o.id,body)){toast("Enregistré");closeLayer()}
+  if(!(await save("opps",o.id,body)))return null;
+  S.dirty={};if(!quiet){toast("Enregistré");closeLayer()}return body;
 }
 async function saveProjet(){
   const body={titre:val("p-titre").trim(),client:val("p-client").trim(),montant:+val("p-montant")||0,stage:val("p-stage"),demarrage:val("p-demarrage"),facture:val("p-facture"),paye:val("p-paye"),notes:val("p-notes"),
@@ -1628,12 +1633,14 @@ async function migrateLegacy(){
 }
 document.addEventListener("keydown",e=>{if(e.key==="Enter"&&e.target.classList&&e.target.classList.contains("title-edit")){e.preventDefault();const b=document.querySelector('.drawer [data-act^="save-"]');if(b)b.click();return}if(e.key==="Escape"&&S.L)closeLayer()});
 document.addEventListener("input",e=>{
+  if(e.target.id&&e.target.closest&&e.target.closest("#layer .drawer")){S.dirty=S.dirty||{};S.dirty[e.target.id]=e.target.type==="checkbox"?e.target.checked:e.target.value}
   const id=e.target.id;
   if(id&&id.startsWith("f-")){S.filters[id.slice(2)]=e.target.value;const pos=e.target.selectionStart;render();const el=document.getElementById(id);if(el){el.focus();if(id==="f-q"&&pos!=null)el.setSelectionRange(pos,pos)}}
   if(id==="c-studio"||id==="q-studio"){const h=document.getElementById(id+"-hint");if(h)h.innerHTML=studioHint(e.target.value,S.L&&S.L.id)}
   if(id==="i-paste"){clearTimeout(window._pt);window._pt=setTimeout(()=>{if(e.target.value.trim())fromPaste(e.target.value)},400)}
 });
 document.addEventListener("change",e=>{
+  if(e.target.id&&e.target.closest&&e.target.closest("#layer .drawer")){S.dirty=S.dirty||{};S.dirty[e.target.id]=e.target.type==="checkbox"?e.target.checked:e.target.value}
   if(e.target.id==="sel-all"){const list=filteredC().filter(c=>!S.filters.act||actv(c)===S.filters.act);list.forEach(c=>e.target.checked?S.sel.add(c.id):S.sel.delete(c.id));render();return}
   if(e.target.id==="q-compte"){const a=accounts().find(x=>x.id===e.target.value);document.getElementById("q-contact").innerHTML=contactOptions(a,"")}
   if(e.target.id==="i-file"&&e.target.files[0])readFile(e.target.files[0]);
