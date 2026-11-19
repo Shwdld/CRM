@@ -406,100 +406,32 @@ details.more .field input,details.more .field select,details.more .field textare
   .chunk i{transition:width .6s cubic-bezier(.2,.8,.2,1)}
 }
 
-/* ═════ Couche Soft UI : soft skeuomorphism, verre discret, modules organiques, onglets intégrés ═════ */
-:root{--bg:#E3E2DE;--shell:#EEEDEA;--block:#F8F7F5;--raised:#FFFFFF;
-  --glass:rgba(250,249,247,.62);--glass-line:rgba(255,255,255,.8);
-  --sh:0 1px 0 rgba(255,255,255,.95) inset,0 16px 36px -18px rgba(52,40,30,.24),0 3px 8px -4px rgba(52,40,30,.08);
-  --sh-sm:0 1px 0 rgba(255,255,255,.9) inset,0 6px 14px -8px rgba(52,40,30,.28),0 1px 2px rgba(52,40,30,.06);
-  --sh-in:inset 0 2px 5px rgba(52,40,30,.10),inset 0 -1px 0 rgba(255,255,255,.9);
-  --bg-art:radial-gradient(70vw 60vh at 92% -12%,rgba(214,198,174,.55),transparent 62%),radial-gradient(60vw 60vh at -8% 112%,rgba(58,56,54,.12),transparent 60%)}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0F0E0D;--shell:#171615;--block:#1F1D1B;--raised:#282523;
-  --glass:rgba(34,32,30,.6);--glass-line:rgba(255,255,255,.07);
-  --sh:0 1px 0 rgba(255,255,255,.05) inset,0 18px 40px -18px rgba(0,0,0,.75);
-  --sh-sm:0 1px 0 rgba(255,255,255,.06) inset,0 6px 14px -8px rgba(0,0,0,.7);
-  --sh-in:inset 0 2px 6px rgba(0,0,0,.5),inset 0 -1px 0 rgba(255,255,255,.04);
-  --bg-art:radial-gradient(70vw 60vh at 92% -12%,rgba(126,107,85,.22),transparent 62%),radial-gradient(60vw 60vh at -8% 112%,rgba(255,255,255,.04),transparent 60%)}}
-:root[data-theme="dark"]{--bg:#0F0E0D;--shell:#171615;--block:#1F1D1B;--raised:#282523;
-  --glass:rgba(34,32,30,.6);--glass-line:rgba(255,255,255,.07);
-  --sh:0 1px 0 rgba(255,255,255,.05) inset,0 18px 40px -18px rgba(0,0,0,.75);
-  --sh-sm:0 1px 0 rgba(255,255,255,.06) inset,0 6px 14px -8px rgba(0,0,0,.7);
-  --sh-in:inset 0 2px 6px rgba(0,0,0,.5),inset 0 -1px 0 rgba(255,255,255,.04);
-  --bg-art:radial-gradient(70vw 60vh at 92% -12%,rgba(126,107,85,.22),transparent 62%),radial-gradient(60vw 60vh at -8% 112%,rgba(255,255,255,.04),transparent 60%)}
-body{background:var(--bg-art),var(--bg);background-attachment:fixed}
-/* rail en verre flottant */
-.rail{top:14px;height:calc(100vh - 28px);margin:14px 0 14px 14px;background:var(--glass);-webkit-backdrop-filter:blur(22px) saturate(1.25);backdrop-filter:blur(22px) saturate(1.25);border:1px solid var(--glass-line);border-radius:34px 34px 34px 14px;box-shadow:var(--sh)}
-.nav button[aria-current="page"]{background:linear-gradient(180deg,color-mix(in srgb,var(--brand) 86%,#fff),var(--brand));box-shadow:var(--sh-sm)}
-.jn{border:0;background:var(--shell);box-shadow:var(--sh-in)}
-.jn button[aria-pressed="true"]{box-shadow:var(--sh-sm)}
-main{padding-top:20px}
-/* onglet intégré : le titre de page dépasse du grand conteneur et s'y raccorde par un congé */
-.tabrow{display:flex;justify-content:space-between;align-items:flex-end;gap:12px 16px;flex-wrap:wrap;position:relative;z-index:1}
-.tab{position:relative;background:var(--shell);border-radius:40px 40px 0 0;padding:22px 32px 8px 30px;max-width:100%}
-.tab::after{content:"";position:absolute;right:-30px;bottom:0;width:30px;height:30px;background:radial-gradient(circle at 100% 0,transparent 29.5px,var(--shell) 30px)}
-.tab h1{margin:0;font-family:var(--f-title);font-weight:400;font-size:clamp(40px,5vw,62px);letter-spacing:-.015em;line-height:.95}
-.tab h1 em{font-style:italic}
-.tab p{margin:8px 0 0;color:var(--muted)}
-.tabrow>.actions{padding-bottom:12px}
-.shell{background:var(--shell);border-radius:0 44px 44px 44px;padding:22px;box-shadow:0 40px 80px -50px rgba(52,40,30,.35);position:relative;min-height:60vh}
-.shell>.grid,.shell>.kpis{margin-bottom:0}
-.hello{gap:26px}
-.quote{border-left-color:color-mix(in srgb,var(--fg) 14%,transparent)}
-/* modules : grands arrondis, ombres douces, bords parfois asymétriques */
-.block{background:var(--block);border-radius:36px;box-shadow:var(--sh)}
-.grid>.block:nth-child(odd){border-radius:36px 36px 36px 14px}
-.grid>.block:nth-child(even){border-radius:14px 36px 36px 36px}
-.kpi{background:var(--block);box-shadow:var(--sh);border-radius:32px}
-.kpi.hero,.game{background:radial-gradient(120% 140% at 0% 0%,color-mix(in srgb,var(--brand) 82%,#fff) 0%,var(--brand) 55%);box-shadow:0 1px 0 rgba(255,255,255,.12) inset,0 22px 40px -22px rgba(30,20,12,.55)}
-.kpi.hero{border-radius:32px 32px 32px 12px}
-.game{border-radius:42px 42px 42px 16px;padding-bottom:64px;position:relative}
-/* sections qui se chevauchent : les quêtes glissent sur le bloc objectifs */
-.game+.grid{margin-top:-46px;position:relative;z-index:2}
-.game+.grid>.block:first-child{border-radius:36px 36px 36px 14px;box-shadow:0 -1px 0 rgba(255,255,255,.7) inset,0 -18px 40px -24px rgba(30,20,12,.35),var(--sh)}
-.chunk{box-shadow:inset 0 2px 4px rgba(0,0,0,.18)}
-.ring svg circle:last-child{filter:drop-shadow(0 2px 4px rgba(0,0,0,.25))}
-.q,.opp,.lever,.crow,.sib,.mini .it,.facts div,.next,.bcard,.cheer,details.more{box-shadow:var(--sh-sm)}
-.q{border-radius:24px 24px 24px 10px}
-.lever{border-radius:28px 28px 28px 12px}.lever.top{background:radial-gradient(120% 140% at 0% 0%,color-mix(in srgb,var(--brand) 82%,#fff) 0%,var(--brand) 55%)}
-/* boutons et commandes en relief doux */
-.btn{border:0;background:linear-gradient(180deg,var(--raised),color-mix(in srgb,var(--raised) 93%,var(--fg)));box-shadow:var(--sh-sm)}
-.btn:hover{filter:brightness(1.03)}
-.btn.primary{background:linear-gradient(180deg,color-mix(in srgb,var(--brand) 84%,#fff),var(--brand))}
-.btn.ghost{background:none;box-shadow:none}
-.btn:active,.done-btn:active{box-shadow:var(--sh-in)}
-.done-btn{background:linear-gradient(180deg,color-mix(in srgb,var(--brand) 84%,#fff),var(--brand));box-shadow:var(--sh-sm)}
-.round{border:0;box-shadow:var(--sh-sm)}
-.seg-f{background:var(--shell);box-shadow:var(--sh-in)}
-.seg-f button[aria-pressed="true"]{background:linear-gradient(180deg,color-mix(in srgb,var(--brand) 84%,#fff),var(--brand));box-shadow:var(--sh-sm)}
-.ctl select,.toolbar select,.toolbar input,.field input,.field select,.field textarea,.next .row input{border:0;background:var(--shell);box-shadow:var(--sh-in)}
-details.more .field input,details.more .field select,details.more .field textarea{background:var(--shell)}
-button.pill{border:0;background:var(--block);box-shadow:var(--sh-sm);color:var(--fg)}
-button.pill[aria-pressed="true"]{background:linear-gradient(180deg,color-mix(in srgb,var(--brand) 84%,#fff),var(--brand));color:var(--brand-ink)}
-.tags{gap:7px}
-.table-wrap{background:var(--block);box-shadow:var(--sh);border-radius:30px 30px 30px 12px}
-/* kanban : colonnes en creux, cartes en relief */
-.col{background:var(--block);box-shadow:var(--sh-in);border-radius:34px 34px 34px 14px}
-.col.archive{box-shadow:none}
-.pc-body{box-shadow:0 1px 0 rgba(255,255,255,.08) inset,0 14px 28px -16px rgba(20,14,10,.55)}
-.pc-pill{box-shadow:inset 0 1px 0 rgba(255,255,255,.06)}
-.pc-dots{box-shadow:inset 0 2px 4px rgba(0,0,0,.25)}
-.acct{background:var(--block);box-shadow:var(--sh);--nbg:var(--shell)}
-.acct:hover{background:var(--raised)}
-.notched>.go{box-shadow:var(--sh-sm);border:0;background:var(--raised)}
-.pc .notched>.go,.pc>.go{background:var(--block)}
-/* tiroirs et notifications en verre */
-.scrim{background:rgba(18,16,14,.18);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
-.drawer{background:var(--glass);-webkit-backdrop-filter:blur(30px) saturate(1.3);backdrop-filter:blur(30px) saturate(1.3);border:1px solid var(--glass-line);border-radius:38px 38px 38px 14px;box-shadow:var(--sh)}
-.drawer .facts div,.drawer .next,.drawer .sib,.drawer .crow{background:color-mix(in srgb,var(--raised) 82%,transparent)}
-.drawer .field input,.drawer .field select,.drawer .field textarea,.drawer .next .row input{background:color-mix(in srgb,var(--shell) 80%,transparent)}
-.notice{background:var(--glass);-webkit-backdrop-filter:blur(16px);backdrop-filter:blur(16px);border:1px solid var(--glass-line);box-shadow:var(--sh-sm)}
-.toast{-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);box-shadow:var(--sh)}
-.vt{margin-right:2px}
-@media (max-width:760px){
-  .rail{margin:0;top:env(safe-area-inset-top,0px);height:auto;border-radius:0 0 26px 26px;border-width:0 0 1px}
-  .tab{border-radius:32px 32px 0 0;padding:18px 20px 6px}.tab::after{display:none}
-  .shell{border-radius:0 28px 28px 28px;padding:14px}
-  .tabrow>.actions{padding:0 0 10px}
-}
+/* ═════ Verre discret + formes « dossier digital » (onglet en haut à gauche raccordé par une courbe en S) ═════ */
+:root{--glass:rgba(250,249,247,.58);--glass-line:rgba(255,255,255,.7);--tab-h:32px}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--glass:rgba(34,32,30,.55);--glass-line:rgba(255,255,255,.07)}}
+:root[data-theme="dark"]{--glass:rgba(34,32,30,.55);--glass-line:rgba(255,255,255,.07)}
+body{background:radial-gradient(60vw 50vh at 100% 0%,color-mix(in srgb,var(--beige) 22%,transparent),transparent 70%),var(--bg);background-attachment:fixed}
+.rail{top:12px;height:calc(100vh - 24px);margin:12px 0 12px 12px;background:var(--glass);-webkit-backdrop-filter:blur(18px) saturate(1.2);backdrop-filter:blur(18px) saturate(1.2);border:1px solid var(--glass-line);border-radius:30px}
+.drawer{background:var(--glass);-webkit-backdrop-filter:blur(26px) saturate(1.2);backdrop-filter:blur(26px) saturate(1.2);border:1px solid var(--glass-line)}
+.drawer .field input,.drawer .field select,.drawer .field textarea,.drawer .next .row input{background:color-mix(in srgb,var(--raised) 85%,transparent)}
+.scrim{background:rgba(18,16,14,.2);-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
+.notice,.toast{-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px)}
+.notice{background:var(--glass);border:1px solid var(--glass-line)}
+.kpi:not(.hero){background:var(--glass);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border:1px solid var(--glass-line)}
+/* dossier : l'onglet dépasse au-dessus du bloc, coin du haut arrondi, raccord concave */
+.folder{position:relative;margin-top:var(--tab-h);border-top-left-radius:0}
+.folder::before{content:"";position:absolute;left:0;top:calc(-1 * var(--tab-h));width:var(--tab-w,40%);height:calc(var(--tab-h) + 1px);background:var(--fbg,var(--block));border-radius:var(--r-block) calc(var(--tab-h) / 2) 0 0;pointer-events:none}
+.folder::after{content:"";position:absolute;left:var(--tab-w,40%);top:calc(var(--tab-h) / -2);width:calc(var(--tab-h) / 2);height:calc(var(--tab-h) / 2 + 1px);background:radial-gradient(circle at 100% 0,transparent calc(var(--tab-h) / 2 - .5px),var(--fbg,var(--block)) calc(var(--tab-h) / 2));pointer-events:none}
+.folder>.b-h,.folder>.col-h{margin-top:calc(-1 * var(--tab-h) + 4px);position:relative}
+.grid{row-gap:calc(14px + var(--tab-h))}
+.game+.grid{margin-top:calc(var(--tab-h) - 14px)}
+.col.folder{--tab-w:62%;--tab-h:26px}
+.col.archive.folder::before,.col.archive.folder::after{display:none}
+.col.archive.folder{border-top-left-radius:var(--r-block)}
+.board{padding-top:4px}
+.game.folder{--fbg:var(--brand);--tab-w:34%}
+.game.folder>.ring{margin-top:calc(-1 * var(--tab-h) + 6px)}
+@media (max-width:760px){.rail{margin:0;top:env(safe-area-inset-top,0px);height:auto;border-radius:0 0 24px 24px;border-width:0 0 1px}.folder{--tab-w:62%}}
 </style>
 
 <div class="app">
@@ -783,9 +715,7 @@ const avC=(c,cls="")=>`<span class="av ${cls} ${cboard(c)==="prospect"&&cLate(c)
 const avO=(o,cls="")=>{const c=oContact(o);return`<span class="av ${cls} ${oLate(o)?"is-late":""}" style="--c:var(${ocolor(o)})">${esc(initials(c?cname(c):o.nom))}</span>`};
 const heatDots=v=>{const n={froid:1,tiede:2,chaud:3,dormant:0}[v]||0;return`<span class="temp"><span>${[1,2,3].map(i=>`<i class="${i<=n?"on":""}"></i>`).join("")}</span>${CHALEURS[v]||"—"}</span>`};
 const opt=(obj,v,empty)=>(empty!==undefined?`<option value="">${empty}</option>`:"")+Object.entries(obj).map(([k,l])=>`<option value="${k}" ${v===k?"selected":""}>${esc(l)}</option>`).join("");
-const head=(t,sub,acts="")=>`<div class="tabrow"><div class="tab"><h1>${t}</h1>${sub?`<p>${sub}</p>`:""}</div><div class="actions">${VT_VIEWS.includes(S.view)?viewTabs():""}${acts}</div></div><!--/head-->`;
-const VT_VIEWS=["prospect","pipeline","comptes","contacts"];
-const viewTabs=()=>`<div class="seg-f vt" role="tablist" aria-label="Vues">${[["prospect","Prospection"],["pipeline","Pipeline"],["comptes","Accounts"],["contacts","Contacts"]].map(([k,l])=>`<button role="tab" data-vt="${k}" aria-pressed="${S.view===k}">${l}</button>`).join("")}</div>`;
+const head=(t,sub,acts="")=>`<div class="head"><div><h1>${t}</h1>${sub?`<p>${sub}</p>`:""}</div><div class="actions">${acts}</div></div>`;
 const plural=(n,w)=>n+" "+(n>1?w.replace(/^(\S+)/,m=>/[sx]$/.test(m)?m:m+"s"):w);
 const cap=s=>s.charAt(0).toUpperCase()+s.slice(1);
 function examplesNotice(){
@@ -814,7 +744,7 @@ function vToday(){
   const mon=monday();const week=[0,1,2,3,4,5,6].map(i=>addDays(mon,i));
   const xpMonth=acts.filter(h=>h.d.startsWith(m)).reduce((s,h)=>s+xpOf(h.t),0),xpWeek=acts.filter(h=>h.d>=mon).reduce((s,h)=>s+xpOf(h.t),0);
   const R=60,C=2*Math.PI*R;
-  const game=`<section class="game" aria-label="Objectifs du mois">
+  const game=`<section class="game folder" aria-label="Objectifs du mois">
     <div class="ring"><svg viewBox="0 0 140 140"><circle cx="70" cy="70" r="${R}" fill="none" stroke="color-mix(in srgb,var(--brand-ink) 16%,transparent)" stroke-width="12"/>
       <circle cx="70" cy="70" r="${R}" fill="none" stroke="var(--flame)" stroke-width="12" stroke-linecap="round" stroke-dasharray="${C*pc/100} ${C}"/></svg>
       <div class="in"><div><b>${pc}%</b><small>objectif<br>de ${MOIS_L[new Date().getMonth()]}</small></div></div></div>
@@ -833,8 +763,8 @@ function vToday(){
   </section>`;
   const doy=Math.floor((new Date()-new Date(new Date().getFullYear(),0,0))/864e5);
   const jour=cap(new Date().toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"}));
-  const h=`<div class="tabrow"><div class="tab"><div class="hello"><div><h1>Bonjour</h1><p>${jour}</p></div><div class="quote">« ${QUOTES[doy%QUOTES.length]} »</div></div></div>
-    <div class="actions"><button class="btn primary" data-act="new-contact">+ Contact</button><button class="btn" data-act="new-opp">+ Opportunité</button></div></div><!--/head-->`;
+  const h=`<div class="head"><div class="hello"><div><h1>Bonjour</h1><p>${jour}</p></div><div class="quote">« ${QUOTES[doy%QUOTES.length]} »</div></div>
+    <div class="actions"><button class="btn primary" data-act="new-contact">+ Contact</button><button class="btn" data-act="new-opp">+ Opportunité</button></div></div>`;
   if(!S.ready)return h+game+`<div class="block"><div class="empty">Chargement…</div></div>`;
   if(!S.contacts.length&&!S.opps.length)return h+game+`<div class="block"><div class="empty"><b>Votre CRM est vide.</b> Importez votre Google Sheet depuis l'onglet « Importer », ou créez votre premier contact.</div></div>`;
   return h+legacyNotice()+examplesNotice()+game+`<div class="grid">${blocQuests(acts)}${blocPipe()}${blocTimeline()}</div>`;
@@ -864,8 +794,8 @@ function blocQuests(acts){
   const doneToday=acts.filter(h=>h.d===t&&xpOf(h.t)>0).length;
   const cats={};list.forEach(it=>{const q=quest(it);cats[q.cat]=(cats[q.cat]||0)+1});
   const total=doneToday+list.length,shown=S.home.showAll?list:list.slice(0,5);
-  return`<section class="block span-12">
-    <div class="b-h"><div><h2>Quêtes <em>du jour</em></h2>
+  return`<section class="block folder span-12 notched" style="--nbg:var(--bg)">${notch("Ouvrir la prospection",'data-goto="prospect"')}
+    <div class="b-h" style="padding-right:70px"><div><h2>Quêtes <em>du jour</em></h2>
       <p>${list.length?`${plural(list.length,"move")} pour faire avancer le pipe`:"Le pipe avance tout seul aujourd'hui"}</p></div></div>
     ${list.length?`<div class="qsum">${Object.entries(cats).map(([k,n])=>`<span><b>${n}</b>${n>1?k.replace(/^(\S+)/,w=>/[sx]$/.test(w)?w:w+"s"):k}</span>`).join("")}</div>`:""}
     <div class="qprog"><span>${doneToday} / ${total} joué${doneToday>1?"s":""} aujourd'hui</span><div class="chunk" style="--c:var(--c-conv)"><i style="width:${total?doneToday/total*100:0}%"></i></div></div>
@@ -892,7 +822,7 @@ function blocPipe(){
   const pros=S.contacts.filter(c=>cboard(c)==="prospect"),open=S.opps.filter(o=>OPEN.includes(ostage(o)));
   const brut=open.reduce((t,o)=>t+(+o.valeur||0),0),pond=open.reduce((t,o)=>t+pondere(o),0);
   const proDue=pros.filter(c=>c.next&&c.next.date<=today()).length;
-  return`<section class="block span-12"><div class="b-h"><div><h2>Le pipe</h2><p>${pros.length} prospects · ${open.length} opportunités ouvertes${brut?` · ${keur(brut)} brut · ${keur(pond)} pondéré`:""}</p></div></div>
+  return`<section class="block folder span-12"><div class="b-h"><div><h2>Le pipe</h2><p>${pros.length} prospects · ${open.length} opportunités ouvertes${brut?` · ${keur(brut)} brut · ${keur(pond)} pondéré`:""}</p></div></div>
     <div class="stack" role="img" aria-label="Répartition par étape">${parts.map(x=>`<i style="--c:var(${x.s.c});flex:${x.n}" title="${x.s.l} : ${x.n}"></i>`).join("")}</div>
     <div class="stack-leg">${parts.map(x=>`<span><i class="dot" style="--c:var(${x.s.c})"></i>${x.s.l} <b>${x.n}</b></span>`).join("")}</div>
     <div class="boards">
@@ -915,7 +845,7 @@ function blocTimeline(){
   html+="</div>";
   const noNext=S.opps.filter(o=>OPEN.includes(ostage(o))&&!(o.next&&o.next.date));
   const lateN=items.filter(i=>i.late).length;
-  return`<section class="block span-12"><div class="b-h"><div><h2>Rythme <em>commercial</em></h2><p>Relances, calls, propositions et réactivations des ${S.home.weeks} prochaines semaines</p></div>
+  return`<section class="block folder span-12"><div class="b-h"><div><h2>Rythme <em>commercial</em></h2><p>Relances, calls, propositions et réactivations des ${S.home.weeks} prochaines semaines</p></div>
     <div class="seg-f" role="group" aria-label="Période">${[2,4].map(n=>`<button data-weeks="${n}" aria-pressed="${S.home.weeks===n}">${n} semaines</button>`).join("")}</div></div>
     <div class="tl-wrap">${html}</div>
     ${lateN||noNext.length?`<div class="warn">${lateN?`<span class="late">${lateN} action(s) en retard</span>`:""}${noNext.map(o=>`<button class="chipw" data-openo="${o.id}"><i class="dot" style="--c:var(${ocolor(o)})"></i>${esc(o.nom)} · sans prochaine étape</button>`).join("")}</div>`:""}
@@ -940,9 +870,9 @@ function colHead(s,n,extra=""){return`<div class="col-h"><div class="t"><span><i
 function vProspect(){
   const list=filteredC();
   const cols=PROSPECT.map(s=>{const cs=list.filter(c=>cstage(c)===s.k).sort((a,b)=>((a.next&&a.next.date)||"9").localeCompare((b.next&&b.next.date)||"9"));
-    return`<div class="col" data-drop="${s.k}">${colHead(s,cs.length)}${cs.map(pcardC).join("")}</div>`}).join("");
+    return`<div class="col folder" data-drop="${s.k}">${colHead(s,cs.length)}${cs.map(pcardC).join("")}</div>`}).join("");
   const conv=list.filter(c=>cboard(c)==="pipe").sort((a,b)=>(b.converti||b.maj||"").localeCompare(a.converti||a.maj||""));
-  const archive=`<div class="col archive" data-drop="converti">${colHead({l:"Converti en opportunité",c:"--c-conv",d:"A répondu · l'opportunité suit son cours dans le Pipeline."},conv.length)}
+  const archive=`<div class="col archive folder" data-drop="converti">${colHead({l:"Converti en opportunité",c:"--c-conv",d:"A répondu · l'opportunité suit son cours dans le Pipeline."},conv.length)}
     ${conv.slice(0,40).map(c=>{const o=oppsOf(c)[0];return`<div class="arch" ${o?`data-openo="${o.id}"`:`data-open="${c.id}"`}><i class="dot" style="--c:var(${o?ocolor(o):"--c-conv"})"></i><b>${esc(cname(c))}</b><small>${o?esc(olabel(o)):"—"}</small></div>`}).join("")}</div>`;
   return head("Prospection <em>&amp; relances</em>","Glissez une carte : la prochaine relance se calcule toute seule. Dès qu'un contact répond, son opportunité part dans le Pipeline.",`<button class="btn primary" data-act="new-contact">+ Contact</button>`)
    +legacyNotice()+tagFilters(false)+`<div class="board-wrap"><div class="board">${cols}${archive}</div></div>`;
@@ -968,7 +898,7 @@ function vPipeline(){
   const list=filteredO();
   const cols=PIPE.map(s=>{const os=list.filter(o=>ostage(o)===s.k).sort((a,b)=>pondere(b)-pondere(a));
     const sum=os.reduce((t,o)=>t+(+o.valeur||0),0),pd=os.reduce((t,o)=>t+pondere(o),0);
-    return`<div class="col" data-drop="${s.k}">${colHead(s,os.length,sum&&s.k!=="perdu"?` · ${keur(sum)}${OPEN.includes(s.k)?" · pondéré "+keur(pd):""}`:"")}${os.map(pcardO).join("")}</div>`}).join("");
+    return`<div class="col folder" data-drop="${s.k}">${colHead(s,os.length,sum&&s.k!=="perdu"?` · ${keur(sum)}${OPEN.includes(s.k)?" · pondéré "+keur(pd):""}`:"")}${os.map(pcardO).join("")}</div>`}).join("");
   return head("Pipeline","Une carte = une opportunité (un besoin, une mission). Une même entreprise peut en avoir plusieurs.",`<button class="btn primary" data-act="new-opp">+ Opportunité</button>`)
    +legacyNotice()+`<div class="toolbar"><input type="search" id="f-q" placeholder="Rechercher une opportunité, un account…" value="${esc(S.filters.q)}"></div>`
    +`<div class="board-wrap"><div class="board">${cols}</div></div>`;
@@ -1035,7 +965,7 @@ function vContacts(){
 /* ───────── PROJETS ───────── */
 function vProjets(){
   const col=s=>{const ps=S.projets.filter(p=>p.stage===s.k);const tot=ps.reduce((a,p)=>a+(+p.montant||0),0);
-    return`<div class="col" data-pdrop="${s.k}">${colHead({...s,d:eur(tot)},ps.length)}
+    return`<div class="col folder" data-pdrop="${s.k}">${colHead({...s,d:eur(tot)},ps.length)}
     ${ps.map(p=>`<div class="pcard" style="--c:var(${s.c})" draggable="true" data-card="p:${p.id}" data-openp="${p.id}">
       <b>${esc(p.titre||"Projet")}</b><small>${esc(p.client||"")}</small>
       <div class="line"><span class="serif" style="font-size:22px">${eur(p.montant)}</span><small>${p.stage==="facture"&&p.facture?"Facturé le "+fmtD(p.facture):p.stage==="paye"&&p.paye?"Payé le "+fmtD(p.paye):p.demarrage?"Démarre le "+fmtD(p.demarrage):""}</small></div>
@@ -1106,13 +1036,13 @@ function vForecast(){
     <div class="kpi"><span class="label">Gap à l'objectif</span><span class="v ${gapAfter?"late":""}">${keur(gapAfter)}</span><span class="s">${gapAfter?`À trouver après le pondéré · ${keur(gap)} hors pondéré`:"Objectif couvert si le pondéré signe"}</span></div>
   </div>
   <div class="grid">
-    <section class="block span-12"><div class="b-h"><div><h2>Vers l'objectif</h2><p>Objectif ${S.fc.period==="mois"?"mensuel":"trimestriel"} : ${S.fc.edit?`<input type="number" id="fc-ca" min="0" step="500" value="${caTarget()}" style="width:110px;background:var(--raised);border:1px solid var(--line);border-radius:999px;padding:3px 10px"> € / mois <button class="btn sm primary" data-act="save-ca">OK</button>`:`<b>${eur(target)}</b> <button class="lnk" data-act="edit-ca">modifier</button>`}</p></div></div>
+    <section class="block folder span-12"><div class="b-h"><div><h2>Vers l'objectif</h2><p>Objectif ${S.fc.period==="mois"?"mensuel":"trimestriel"} : ${S.fc.edit?`<input type="number" id="fc-ca" min="0" step="500" value="${caTarget()}" style="width:110px;background:var(--raised);border:1px solid var(--line);border-radius:999px;padding:3px 10px"> € / mois <button class="btn sm primary" data-act="save-ca">OK</button>`:`<b>${eur(target)}</b> <button class="lnk" data-act="edit-ca">modifier</button>`}</p></div></div>
       <div class="gauge" role="img" aria-label="Signé, pondéré et brut par rapport à l'objectif">
         <i style="--c:var(--c-signe);width:${signe/scale*100}%"></i><i style="--c:var(--c-contact);width:${pond/scale*100}%"></i><i style="--c:color-mix(in srgb,var(--c-contact) 25%,transparent);width:${Math.max(0,brut-pond)/scale*100}%"></i>
         <span class="target" style="left:${target/scale*100}%"><span>Objectif ${keur(target)}</span></span></div>
       <div class="gleg"><span><i class="dot" style="--c:var(--c-signe)"></i>Signé <b>${eur(signe)}</b></span><span><i class="dot" style="--c:var(--c-contact)"></i>Pondéré <b>${eur(pond)}</b></span><span><i class="dot" style="--c:color-mix(in srgb,var(--c-contact) 30%,var(--raised))"></i>Reste du brut <b>${eur(Math.max(0,brut-pond))}</b></span><span>Encaissé <b>${eur(paid)}</b> · factures en attente <b>${eur(pend)}</b></span></div>
     </section>
-    <section class="block span-12"><div class="b-h"><div><h2>Où mettre <em>vos efforts</em></h2><p>Diagnostic calculé à partir de vos chiffres</p></div></div>
+    <section class="block folder span-12"><div class="b-h"><div><h2>Où mettre <em>vos efforts</em></h2><p>Diagnostic calculé à partir de vos chiffres</p></div></div>
       ${contacted<5?`<span class="data-note">Encore peu de données : les calculs utilisent des repères moyens en attendant vos vrais chiffres.</span>`:""}
       <div class="levers">
         ${lever("leads","Générer plus de leads",gapAfter&&needDeals?`Il manque ~${plural(needDeals,"signature")} pour l'objectif. À votre taux de conversion, cela représente <b>~${needContacts} nouveaux contacts</b>.`:"Le pipe couvre l'objectif de la période.",`${newThisMonth} nouveaux contacts ce mois · objectif ${goalTarget(GOALS[0])}`)}
@@ -1120,15 +1050,15 @@ function vForecast(){
         ${lever("valeur","Augmenter la valeur moyenne",avg?`Valeur moyenne : <b>${eur(avg)}</b>. Il faut ~${Math.ceil(dealsPerMonth*10)/10} signatures par mois pour l'objectif. ${dealsPerMonth>3?"Visez plus de core et de big bets, ou des forfaits plus complets.":"Le niveau est sain pour votre objectif."}`:"Renseignez la valeur de vos opportunités.",`${vals.length?"Sur "+plural(vals.length,"signature"):"Sur les opportunités estimées"}`)}
       </div>
     </section>
-    <section class="block span-7"><div class="b-h"><div><h2>Conversion <em>par étape</em></h2><p>Depuis le début · le trait indique le repère</p></div></div>
+    <section class="block folder span-7"><div class="b-h"><div><h2>Conversion <em>par étape</em></h2><p>Depuis le début · le trait indique le repère</p></div></div>
       <div class="funnel">${st.map(s=>`<div class="fstep"><div>${s.l}<small>${s.a} / ${s.b}${s.ok?"":" · trop peu de données"}</small></div>
         <div class="track"><i style="--c:var(${s.ok&&s.rate<BENCH[s.k]*.8?"--late":"--c-signe"});width:${Math.min(100,s.rate*100)}%"></i><u style="left:${BENCH[s.k]*100}%"></u></div>
         <span class="n">${s.b?pct(s.rate):"—"}</span></div>`).join("")}</div>
       <small class="muted">Bout en bout : ${pct(e2e)} des contacts deviennent des signatures.</small></section>
-    <section class="block span-5"><div class="b-h"><div><h2>Mix du pipe</h2><p>Opportunités ouvertes par type${noCat?` · ${noCat} non classée(s)`:""}</p></div></div>
+    <section class="block folder span-5"><div class="b-h"><div><h2>Mix du pipe</h2><p>Opportunités ouvertes par type${noCat?` · ${noCat} non classée(s)`:""}</p></div></div>
       <div class="bars">${mix.map(m=>`<div class="bar"><span>${m.l} <small class="muted">· ${m.n}</small></span><div class="track"><div class="fill" style="width:${m.v/mixMax*100}%;--c:var(--c-contact)"></div></div><span class="n">${keur(m.v)}</span></div>`).join("")}</div>
       ${risks.length?`<div><p class="label" style="margin:6px 0 10px">Risques principaux</p><div class="bars">${risks.map(x=>`<div class="bar"><span>${x.l} <small class="muted">· ${x.n}</small></span><div class="track"><div class="fill" style="width:${x.v/Math.max(1,brut)*100}%;--c:var(--c-nego)"></div></div><span class="n">${keur(x.v)}</span></div>`).join("")}</div></div>`:""}</section>
-    <section class="block span-12"><div class="b-h"><div><h2>Les 3 prochains mois</h2><p>Signé + pondéré par mois de signature estimée · démarrages prévus pour anticiper le cash et la charge</p></div></div>
+    <section class="block folder span-12"><div class="b-h"><div><h2>Les 3 prochains mois</h2><p>Signé + pondéré par mois de signature estimée · démarrages prévus pour anticiper le cash et la charge</p></div></div>
       <div class="mcols"><div class="mline" style="bottom:${caTarget()/mmax*136+40}px"><span>Objectif ${keur(caTarget())}</span></div>
         ${mdata.map(x=>`<div class="c"><b>${keur(x.s+x.p)}</b><div class="st" style="height:${(x.s+x.p)/mmax*136}px"><i style="--c:var(--c-signe);height:${x.s/Math.max(1,x.s+x.p)*100}%"></i><i style="--c:var(--c-contact);height:${x.p/Math.max(1,x.s+x.p)*100}%"></i></div>
           <span>${cap(monthName(x.mk))}<br>${x.d.length?`${plural(x.d.length,"démarrage")} · ${keur(x.d.reduce((t,o)=>t+(+o.valeur||0),0))}`:"aucun démarrage"}</span></div>`).join("")}</div></section>
@@ -1394,7 +1324,7 @@ function render(){
   buildIndex();renderNav();
   const V={today:vToday,prospect:vProspect,pipeline:vPipeline,comptes:vComptes,contacts:vContacts,projets:vProjets,forecast:vForecast,import:vImport}[S.view]||vToday;
   const keep=S.view==="import"&&document.getElementById("i-paste");
-  if(!keep){const html=V(),i=html.indexOf("<!--/head-->");document.getElementById("main").innerHTML=i<0?`<div class="shell">${html}</div>`:html.slice(0,i)+`<div class="shell">${html.slice(i+12)}</div>`}
+  if(!keep)document.getElementById("main").innerHTML=V();
   renderLayer();
 }
 function renderLayer(){
@@ -1417,7 +1347,6 @@ document.addEventListener("click",async e=>{
   if(t.closest("[data-close]")){closeLayer();return}
   const svc=t.closest("[data-svc]");if(svc){svc.classList.toggle("primary");return}
   const pk=t.closest("[data-pick]");if(pk){const i=document.getElementById("c-studio")||document.getElementById("q-studio");i.value=pk.dataset.pick;i.dispatchEvent(new Event("input",{bubbles:true}));return}
-  const vt=t.closest("[data-vt]");if(vt){go(vt.dataset.vt);return}
   const fl=t.closest("[data-filter]");if(fl){const[k,v]=fl.dataset.filter.split(":");S.filters[k]=S.filters[k]===v?"":v;render();return}
   const wk=t.closest("[data-weeks]");if(wk){S.home.weeks=+wk.dataset.weeks;render();return}
   const pe=t.closest("[data-period]");if(pe){S.fc.period=pe.dataset.period;render();return}
