@@ -2,6 +2,7 @@
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@400;500;600&display=swap">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 /* Layout : rail à gauche ; Dashboard en 3 couches ; 2 kanbans (contacts en prospection, opportunités en pipeline) ;
    Contact ↔ Account ↔ Opportunité ; Revenue forecast. Brun anthracite unique (celui des cartes) partout. */
@@ -1066,21 +1067,20 @@ function vForecast(){
 }
 
 /* ───────── IMPORT ───────── */
+/* Accepte : le fichier Excel complet (tous les onglets), un .csv, ou un copier-coller d'un onglet. */
 let IMP=null;
 function vImport(){
-  return head("Importer","Votre Google Sheet, un onglet à la fois. Les colonnes sont reconnues automatiquement.")
+  return head("Importer","Votre Google Sheet entier, tous les onglets d'un coup. Les colonnes sont reconnues automatiquement.")
   +`<div class="steps-list">
-    <div><b>1 · Exporter</b>Dans Google Sheets : Fichier → Télécharger → .csv, pour l'onglet ouvert. Ou copiez simplement le tableau.</div>
-    <div><b>2 · Choisir les tags</b>Type de contact et source par défaut pour cet onglet.</div>
-    <div><b>3 · Vérifier et importer</b>Les dates de vos mails placent chaque prospect dans la bonne colonne. Les accounts sont créés et reliés.</div>
+    <div><b>1 · Télécharger le fichier</b>Dans Google Sheets : Fichier → Télécharger → <b>Microsoft Excel (.xlsx)</b>. Ce format garde tous les onglets.</div>
+    <div><b>2 · Le déposer ici</b>Chaque onglet est lu. Le type de contact est deviné d'après le nom de l'onglet ; vous pouvez le changer.</div>
+    <div><b>3 · Vérifier et importer</b>L'aperçu indique les lignes gardées, les doublons et les lignes ignorées avec la raison.</div>
   </div>
-  <div class="form" style="margin-bottom:16px">
-    <label class="field"><span class="label">Type de contact</span><select id="i-type">${opt(TYPES,"studio")}</select></label>
-    <label class="field"><span class="label">Source</span><select id="i-source">${opt(SOURCES,"outbound")}</select></label>
-  </div>
-  <div class="drop" id="drop"><p style="margin:0 0 10px">Déposez le fichier .csv ici</p><label class="btn"><input type="file" id="i-file" accept=".csv,text/csv" hidden>Choisir un fichier</label></div>
-  <p class="label" style="margin:16px 0 6px">Ou collez les cellules copiées depuis Google Sheets</p>
-  <div class="field"><textarea id="i-paste" placeholder="Sélectionnez votre tableau (avec la ligne de titres), copiez, puis collez ici." style="min-height:110px"></textarea></div>
+  <div class="drop" id="drop"><p style="margin:0 0 10px">Déposez le fichier .xlsx (ou .csv) ici</p><label class="btn primary"><input type="file" id="i-file" accept=".xlsx,.xls,.csv,text/csv" hidden>Choisir le fichier</label></div>
+  <details class="more" style="margin-top:14px"><summary>Ou coller un seul onglet</summary>
+    <div class="form" style="margin-bottom:10px"><label class="field"><span class="label">Type par défaut</span><select id="i-type">${opt(TYPES,"studio")}</select></label>
+      <label class="field"><span class="label">Source par défaut</span><select id="i-source">${opt(SOURCES,"outbound")}</select></label></div>
+    <div class="field"><textarea id="i-paste" placeholder="Sélectionnez tout l'onglet (avec la ligne de titres), copiez, puis collez ici." style="min-height:110px"></textarea></div></details>
   <div id="i-preview" style="margin-top:20px"></div>`;
 }
 function parseTable(txt){
@@ -1089,52 +1089,104 @@ function parseTable(txt){
   const rows=[];let cur=[""],q=false;
   for(let i=0;i<txt.length;i++){const ch=txt[i];
     if(q){if(ch==='"'){if(txt[i+1]==='"'){cur[cur.length-1]+='"';i++}else q=false}else cur[cur.length-1]+=ch}
-    else if(ch==='"')q=true;else if(ch===sep)cur.push("");else if(ch==="\n"){rows.push(cur);cur=[""]}else if(ch!=="\r")cur[cur.length-1]+=ch}
-  rows.push(cur);return rows.filter(r=>r.some(c=>c.trim()));
+    else if(ch==='"'&&cur[cur.length-1]==="")q=true;else if(ch===sep)cur.push("");else if(ch==="\n"){rows.push(cur);cur=[""]}else if(ch!=="\r")cur[cur.length-1]+=ch}
+  rows.push(cur);return rows;
 }
-const nrm=s=>(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").trim();
-function parseDate(s){s=(s||"").trim();if(!s)return"";let m=s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})$/);
-  if(m){let y=+m[3];if(y<100)y+=2000;return y+"-"+pad(+m[2])+"-"+pad(+m[1])}m=s.match(/^(\d{4})-(\d{2})-(\d{2})/);return m?m[0]:""}
+const nrm=s=>String(s??"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").trim();
+function parseDate(v){
+  if(v instanceof Date&&!isNaN(v))return iso(v);
+  const s=String(v??"").trim();if(!s)return"";
+  let m=s.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})/);
+  if(m){let y=+m[3];if(y<100)y+=2000;let d=+m[1],mo=+m[2];if(mo>12&&d<=12){[d,mo]=[mo,d]}if(mo<1||mo>12||d<1||d>31)return"";return y+"-"+pad(mo)+"-"+pad(d)}
+  m=s.match(/^(\d{4})-(\d{2})-(\d{2})/);if(m)return m[0];
+  m=s.match(/^(\d{1,2})[\/.\-](\d{1,2})$/);if(m){const y=new Date().getFullYear();return y+"-"+pad(+m[2])+"-"+pad(+m[1])}
+  return"";
+}
 function guessZone(loc){const l=nrm(loc);if(!l)return"fr";if(/france|paris|lyon|marseille|bordeaux|lille|nantes|toulouse|nice|rennes/.test(l))return"fr";
-  if(/new york|ny|boston|miami|toronto|montreal/.test(l))return"us_e";if(/los angeles|la|san francisco|seattle|vancouver/.test(l))return"us_w";
-  if(/usa|us|etats|united states/.test(l))return"us_e";if(/tokyo|seoul|shanghai|hong|singap|japon|chine|coree/.test(l))return"asie";return"eu"}
-function buildImport(txt){
-  const rows=parseTable(txt);if(rows.length<2)return null;
-  const h=rows[0].map(nrm);
-  const find=(...keys)=>h.findIndex(x=>keys.some(k=>x.includes(k)));
-  const ix={loc:find("locali","ville","pays","lieu"),studio:find("studio","client","nom","agence","entreprise"),stat:find("statut","status","etat"),mail:find("mail"),note:find("note","info","reco")};
-  const dateCols=h.map((x,i)=>/date|mail \d|relance/.test(x)&&i!==ix.mail?i:-1).filter(i=>i>=0);
-  const contactIx=h.findIndex((x,i)=>i!==ix.studio&&/(contact|prenom|personne|interlocut)/.test(x));
-  const posteIx=h.findIndex(x=>/(poste|fonction|titre)/.test(x)),liIx=h.findIndex(x=>/linkedin/.test(x));
-  const defT=document.getElementById("i-type").value,defS=document.getElementById("i-source").value;
-  const out=rows.slice(1).map(r=>{
-    const g=i=>i>=0?(r[i]||"").trim():"";
+  if(/new york|\bny\b|nyc|boston|miami|toronto|montreal|chicago/.test(l))return"us_e";if(/los angeles|\bla\b|san francisco|seattle|vancouver/.test(l))return"us_w";
+  if(/usa|\bus\b|etats|united states|amerique/.test(l))return"us_e";if(/tokyo|seoul|shanghai|hong|singap|japon|chine|coree|dubai/.test(l))return"asie";return"eu"}
+function guessType(tab,def){const t=nrm(tab);if(/apporteur|partenaire|affaire/.test(t))return"apporteur";if(/ancien|client/.test(t))return"ancien_client";if(/tiede|repondu/.test(t))return"tiede";return def||"studio"}
+const KEYS={studio:["studio","client","agence","entreprise","societe","marque","structure","nom"],loc:["locali","ville","pays","lieu","country","city"],stat:["statut","status","etat"],mail:["mail","email","e-mail"],
+  note:["note","info","reco","commentaire","remarque"],contact:["contact","prenom","personne","interlocut"],poste:["poste","fonction","titre","role"],li:["linkedin"],dom:["domaine","activite","secteur"],insta:["insta"]};
+function findHeader(rows){
+  let best=-1,score=0;
+  for(let i=0;i<Math.min(8,rows.length);i++){const r=rows[i].map(nrm);let sc=0;for(const ks of Object.values(KEYS))if(r.some(c=>c&&c.length<40&&ks.some(k=>c.includes(k))))sc++;if(r.some(c=>/date|relance|mail \d|1er|2e/.test(c)))sc++;if(sc>score){score=sc;best=i}}
+  return score>=2?best:-1;
+}
+/* Transforme les lignes d'un onglet en contacts ; garde la trace des lignes écartées */
+function buildTab(rows,tab,defT,defS){
+  rows=rows.map(r=>r.map(c=>c instanceof Date?iso(c):String(c??"").trim()));
+  const hi=findHeader(rows);
+  if(hi<0)return{name:tab,list:[],skipped:[{n:0,why:"Ligne de titres introuvable (il faut au moins 2 colonnes reconnues, ex. « Nom du studio » et « Mail »)"}],cols:{},type:defT,include:false};
+  const h=rows[hi].map(nrm);const used=new Set();
+  const find=(ks,excl=[])=>{const i=h.findIndex((x,j)=>x&&!used.has(j)&&!excl.some(e=>x.includes(e))&&ks.some(k=>x.includes(k)));if(i>=0)used.add(i);return i};
+  const ix={mail:find(KEYS.mail,["date","1er","2e","envoi","relance"]),li:find(KEYS.li),contact:find(KEYS.contact,["date"]),poste:find(KEYS.poste),studio:find(KEYS.studio,["date","mail"]),loc:find(KEYS.loc),stat:find(KEYS.stat),note:find(KEYS.note),dom:find(KEYS.dom)};
+  const dateCols=h.map((x,i)=>!used.has(i)&&/date|relance|envoi|1er|2e|3e|mail \d/.test(x)?i:-1).filter(i=>i>=0);
+  const type=guessType(tab,defT),tabN=nrm(tab),list=[],skipped=[];
+  rows.slice(hi+1).forEach((r,k)=>{
+    const g=i=>i>=0?(r[i]||"").trim():"";const line=hi+k+2;
+    if(!r.some(c=>c))return;
+    const studio=g(ix.studio),nom=g(ix.contact),email=g(ix.mail).replace(/^mailto:/,""),li=g(ix.li);
+    if(!studio&&!nom&&!email&&!li){skipped.push({n:line,why:"Ni nom, ni studio, ni mail",txt:r.filter(Boolean).slice(0,3).join(" · ")});return}
     const dates=dateCols.map(i=>parseDate(r[i])).filter(Boolean).sort();
     const st=nrm(g(ix.stat));
-    const c={id:uid(),studio:g(ix.studio),nom:contactIx>=0?g(contactIx):"",poste:posteIx>=0?g(posteIx):"",email:g(ix.mail),linkedin:g(liIx),pays:g(ix.loc),zone:guessZone(g(ix.loc)),note:g(ix.note),
-      type:defT,source:/reco/.test(nrm(g(ix.note)))?"reco":defS,relances:dates.length,hist:[],cree:today()};
+    const c={id:uid(),studio,nom,poste:g(ix.poste),email,linkedin:li,pays:g(ix.loc),zone:guessZone(g(ix.loc)),note:[g(ix.note),g(ix.dom)].filter(Boolean).join(" · "),
+      type,source:/reco/.test(nrm(g(ix.note)))?"reco":defS,relances:dates.length,hist:[],cree:today(),_tab:tab};
     dates.forEach((d,i)=>c.hist.unshift({d,t:i===0?"Premier message envoyé":"Relance "+i+" envoyée"}));
     const last=dates[dates.length-1];
-    if(/repon|repondu/.test(st)){c.stage="pipeline";c.converti=today();c._opp=true}
-    else if(!dates.length&&!/envoy|relanc/.test(st)){c.stage="a_contacter";c.next={date:today(),label:"Envoyer le premier message"};c.relances=0}
+    const notYet=/a envoyer|to send|a contacter|pas encore/.test(st)||(!st&&/to send|a envoyer|a contacter/.test(tabN));
+    const sent=dates.length||(!notYet&&(/envoy|relanc|attente/.test(st)||(/envoy|sent/.test(tabN)&&!/a envoyer|to send/.test(tabN))));
+    if(/repon|repondu|interess|call/.test(st)){c.stage="pipeline";c.converti=today();c._opp=true}
+    else if(!sent){c.stage="a_contacter";c.next={date:today(),label:"Envoyer le premier message"};c.relances=0}
     else{const n=Math.max(1,dates.length);c.relances=n;const rr=rythme(c,n,last||today());c.stage=rr.stage;c.next=rr.next;
-      if(/a relancer/.test(st)&&rr.stage!=="sommeil"){c.stage="relance";c.next={date:today(),label:"Relance "+n}}}
-    return c;
-  }).filter(c=>c.studio||c.email);
-  return{cols:ix,dateCols:dateCols.length,list:out};
+      if(/a relancer|relancer/.test(st)&&rr.stage!=="sommeil"){c.stage=n>1?"relance":"contacte";c.next={date:today(),label:"Relance "+n}}}
+    list.push(c);
+  });
+  return{name:tab,list,skipped,cols:ix,dates:dateCols.length,type,include:true};
 }
-const isDupe=c=>S.contacts.some(x=>(c.email&&x.email&&x.email.toLowerCase()===c.email.toLowerCase())||(!c.email&&!c.nom&&x.studio&&c.studio&&norm(x.studio)===norm(c.studio)));
-function showPreview(txt){
-  const box=document.getElementById("i-preview");IMP=buildImport(txt);
-  if(!IMP||!IMP.list.length){box.innerHTML=`<div class="notice">Aucune ligne exploitable. Vérifiez que la première ligne contient les titres (Nom du studio, Mail…).</div>`;return}
-  const known=Object.entries({studio:"Nom du studio",loc:"Localisation",stat:"Statut",mail:"Mail",note:"Notes"}).map(([k,l])=>`<span class="tag" style="--c:var(${IMP.cols[k]>=0?"--c-signe":"--late"})"><span class="dot"></span>${l}</span>`).join(" ");
-  const dupes=IMP.list.filter(isDupe).length;
-  box.innerHTML=`<div class="block"><div class="b-h"><div><h2>${IMP.list.length} contacts prêts</h2><p>${IMP.dateCols} colonne(s) de dates reconnue(s)${dupes?` · ${dupes} déjà présents, ignorés`:""}</p></div></div>
-   <div style="display:flex;gap:8px;flex-wrap:wrap">${known}</div>
-   <div class="table-wrap" style="max-height:340px;overflow:auto"><table><thead><tr><th>Entreprise</th><th>Pays</th><th>Colonne</th><th>Prochaine action</th></tr></thead><tbody>
-   ${IMP.list.slice(0,40).map(c=>`<tr><td>${esc(c.studio)}</td><td>${esc(c.pays)}</td><td>${c._opp?"Pipeline · Répondu":esc(C_STAGE[c.stage].l)}</td><td>${c.next?rel(c.next.date)+" · "+esc(c.next.label):"Qualifier"}</td></tr>`).join("")}
-   </tbody></table></div>
-   <div class="actions"><button class="btn primary" data-act="do-import" ${S.db?"":"disabled"}>Importer ${IMP.list.length-dupes} contacts</button><button class="btn ghost" data-act="cancel-import">Annuler</button></div></div>`;
+const keyOf=c=>c.email?c.email.toLowerCase():(nrm(c.nom)+"|"+norm(c.studio));
+const isDupe=c=>S.contacts.some(x=>(c.email&&x.email&&x.email.toLowerCase()===c.email.toLowerCase())||(!c.email&&x.studio&&c.studio&&norm(x.studio)===norm(c.studio)&&nrm(x.nom)===nrm(c.nom)));
+function importPlan(){
+  const seen={},keep=[],dup=[],inside=[];
+  IMP.tabs.filter(t=>t.include).forEach(t=>t.list.forEach(c=>{
+    if(isDupe(c)){dup.push(c);return}
+    const k=keyOf(c);if(k&&k!=="|"&&seen[k]){const o=seen[k];inside.push(c);if((c.relances||0)>(o.relances||0)){Object.assign(o,{...c,id:o.id})}return}
+    if(k&&k!=="|")seen[k]=c;keep.push(c)}));
+  return{keep,dup,inside};
+}
+function renderPreview(){
+  const box=document.getElementById("i-preview");if(!box||!IMP)return;
+  if(!IMP.tabs.length){box.innerHTML=`<div class="notice">Aucun onglet lisible dans ce fichier.</div>`;return}
+  const plan=importPlan();
+  const colL={studio:"Studio",contact:"Nom",mail:"Mail",loc:"Localisation",stat:"Statut",note:"Notes",poste:"Poste",li:"LinkedIn"};
+  box.innerHTML=`<div class="block"><div class="b-h"><div><h2>${plan.keep.length} contacts prêts</h2>
+      <p>${IMP.tabs.length} onglet(s) lu(s)${plan.dup.length?` · ${plan.dup.length} déjà dans le CRM`:""}${plan.inside.length?` · ${plan.inside.length} en double entre onglets (fusionnés)`:""}</p></div></div>
+    <div class="table-wrap"><table><thead><tr><th>Importer</th><th>Onglet</th><th>Lignes gardées</th><th>Ignorées</th><th>Type de contact</th><th>Colonnes reconnues</th></tr></thead><tbody>
+    ${IMP.tabs.map((t,i)=>`<tr style="cursor:default"><td><input type="checkbox" id="it-inc-${i}" ${t.include?"checked":""} ${t.list.length?"":"disabled"} aria-label="Importer l'onglet ${esc(t.name)}"></td>
+      <td><b style="font-weight:500">${esc(t.name)}</b></td><td>${t.list.length}</td><td class="${t.skipped.length?"late":""}">${t.skipped.length}</td>
+      <td><select id="it-type-${i}" style="background:var(--raised);border:1px solid var(--line);border-radius:999px;padding:4px 10px">${opt(TYPES,t.type)}</select></td>
+      <td style="white-space:normal;min-width:220px">${Object.entries(colL).filter(([k])=>t.cols[k]>=0).map(([,l])=>`<span class="pill">${l}</span>`).join(" ")}${t.dates?` <span class="pill">${t.dates} date(s)</span>`:""}</td></tr>`).join("")}
+    </tbody></table></div>
+    ${IMP.tabs.some(t=>t.skipped.length)?`<details class="more"><summary>Voir les lignes ignorées et pourquoi</summary><div style="display:flex;flex-direction:column;gap:6px;font-size:12.5px">
+      ${IMP.tabs.flatMap(t=>t.skipped.slice(0,30).map(x=>`<div><b style="font-weight:500">${esc(t.name)}</b>${x.n?` · ligne ${x.n}`:""} · ${esc(x.why)}${x.txt?` <span class="muted">(${esc(x.txt)})</span>`:""}</div>`)).join("")}</div></details>`:""}
+    <div class="table-wrap" style="max-height:340px;overflow:auto"><table><thead><tr><th>Onglet</th><th>Nom</th><th>Entreprise</th><th>Mail</th><th>Colonne</th><th>Prochaine action</th></tr></thead><tbody>
+    ${plan.keep.slice(0,60).map(c=>`<tr style="cursor:default"><td class="muted">${esc(c._tab)}</td><td>${esc(c.nom||"—")}</td><td>${esc(c.studio||"—")}</td><td>${esc(c.email||"—")}</td><td>${c._opp?"Pipeline · Répondu":esc(C_STAGE[c.stage].l)}</td><td>${c.next?rel(c.next.date)+" · "+esc(c.next.label):"Qualifier"}</td></tr>`).join("")}
+    </tbody></table></div>${plan.keep.length>60?`<small class="muted">… et ${plan.keep.length-60} autres</small>`:""}
+    <div class="actions"><button class="btn primary" data-act="do-import" ${S.db&&plan.keep.length?"":"disabled"}>Importer ${plan.keep.length} contacts</button><button class="btn ghost" data-act="cancel-import">Annuler</button></div></div>`;
+}
+function fromPaste(txt){
+  const defT=(document.getElementById("i-type")||{}).value||"studio",defS=(document.getElementById("i-source")||{}).value||"outbound";
+  IMP={tabs:[buildTab(parseTable(txt),"Collage",defT,defS)]};renderPreview();
+}
+async function readFile(f){
+  const box=document.getElementById("i-preview");
+  if(/\.csv$/i.test(f.name)){const txt=await f.text();IMP={tabs:[buildTab(parseTable(txt),f.name.replace(/\.csv$/i,""),"studio","outbound")]};renderPreview();return}
+  if(typeof XLSX==="undefined"){box.innerHTML=`<div class="notice">Le lecteur Excel n'a pas pu se charger. Rechargez la page, ou importez onglet par onglet en .csv.</div>`;return}
+  box.innerHTML=`<div class="notice">Lecture du fichier…</div>`;
+  try{const wb=XLSX.read(await f.arrayBuffer(),{cellDates:true});
+    IMP={tabs:wb.SheetNames.map(n=>buildTab(XLSX.utils.sheet_to_json(wb.Sheets[n],{header:1,raw:true,defval:""}),n,"studio","outbound")).filter(t=>t.list.length||t.skipped.length)};
+    renderPreview();
+  }catch(e){box.innerHTML=`<div class="notice">Ce fichier n'a pas pu être lu. Vérifiez qu'il s'agit bien d'un .xlsx téléchargé depuis Google Sheets.</div>`}
 }
 async function ensureCompte(name,extra={},cache){
   const n=norm(name);if(!n)return"";
@@ -1150,9 +1202,9 @@ async function newOppFor(c,compteId,extra={}){
 }
 async function doImport(){
   if(!IMP)return;const btn=document.querySelector('[data-act="do-import"]');
-  const todo=IMP.list.filter(c=>!isDupe(c));const cache={};
-  let n=0;for(const c of todo){const{id,_opp,...body}=c;if(body.studio)body.compteId=await ensureCompte(body.studio,{pays:body.pays},cache);
-    if(await save("contacts",id,body,true)){n++;if(_opp)await newOppFor({...body,id},body.compteId)}if(btn)btn.textContent="Import… "+n+"/"+todo.length}
+  const plan=importPlan();const cache={};let n=0;
+  for(const c of plan.keep){const{id,_opp,_tab,...body}=c;if(body.studio)body.compteId=await ensureCompte(body.studio,{pays:body.pays},cache);
+    if(await save("contacts",id,body,true)){n++;if(_opp)await newOppFor({...body,id},body.compteId)}if(btn)btn.textContent="Import… "+n+"/"+plan.keep.length}
   IMP=null;toast(n+" contacts importés");go("prospect");
 }
 
@@ -1323,7 +1375,7 @@ function drawerProjet(p,isNew){
 function render(){
   buildIndex();renderNav();
   const V={today:vToday,prospect:vProspect,pipeline:vPipeline,comptes:vComptes,contacts:vContacts,projets:vProjets,forecast:vForecast,import:vImport}[S.view]||vToday;
-  const keep=S.view==="import"&&document.getElementById("i-paste");
+  const keep=S.view==="import"&&document.getElementById("i-preview");
   if(!keep)document.getElementById("main").innerHTML=V();
   renderLayer();
 }
@@ -1387,7 +1439,7 @@ document.addEventListener("click",async e=>{
     case"toggle-all":S.home.showAll=!S.home.showAll;render();break;
     case"migrate":a.disabled=true;await migrateLegacy();break;
     case"do-import":a.disabled=true;await doImport();break;
-    case"cancel-import":IMP=null;document.getElementById("i-preview").innerHTML="";document.getElementById("i-paste").value="";break;
+    case"cancel-import":{IMP=null;document.getElementById("i-preview").innerHTML="";const p=document.getElementById("i-paste");if(p)p.value="";break}
     case"clear-ex":if(a.dataset.sure){a.disabled=true;for(const k of["contacts","projets","comptes","opps"])for(const x of S[k].filter(y=>y.exemple))await del(k,x.id);toast("Exemples supprimés")}else{a.dataset.sure=1;a.textContent="Confirmer : supprimer les exemples"}break;
   }
 });
@@ -1494,14 +1546,14 @@ document.addEventListener("input",e=>{
   const id=e.target.id;
   if(id&&id.startsWith("f-")){S.filters[id.slice(2)]=e.target.value;const pos=e.target.selectionStart;render();const el=document.getElementById(id);if(el){el.focus();if(id==="f-q"&&pos!=null)el.setSelectionRange(pos,pos)}}
   if(id==="c-studio"||id==="q-studio"){const h=document.getElementById(id+"-hint");if(h)h.innerHTML=studioHint(e.target.value,S.L&&S.L.id)}
-  if(id==="i-paste"){clearTimeout(window._pt);window._pt=setTimeout(()=>{if(e.target.value.trim())showPreview(e.target.value)},400)}
+  if(id==="i-paste"){clearTimeout(window._pt);window._pt=setTimeout(()=>{if(e.target.value.trim())fromPaste(e.target.value)},400)}
 });
 document.addEventListener("change",e=>{
   if(e.target.id==="q-compte"){const a=accounts().find(x=>x.id===e.target.value);document.getElementById("q-contact").innerHTML=contactOptions(a,"")}
   if(e.target.id==="i-file"&&e.target.files[0])readFile(e.target.files[0]);
-  if(["i-type","i-source"].includes(e.target.id)){const p=document.getElementById("i-paste");if(window._lastTxt||p.value)showPreview(window._lastTxt||p.value)}
+  if(["i-type","i-source"].includes(e.target.id)){const p=document.getElementById("i-paste");if(p&&p.value.trim())fromPaste(p.value)}
+  const m=/^it-(inc|type)-(\d+)$/.exec(e.target.id||"");if(m&&IMP){const t=IMP.tabs[+m[2]];if(m[1]==="inc")t.include=e.target.checked;else{t.type=e.target.value;t.list.forEach(c=>c.type=t.type)}renderPreview()}
 });
-function readFile(f){const r=new FileReader();r.onload=()=>{window._lastTxt=r.result;showPreview(r.result)};r.readAsText(f)}
 
 let drag=null;
 document.addEventListener("dragstart",e=>{const c=e.target.closest&&e.target.closest("[data-card]");if(!c)return;drag=c.dataset.card;c.classList.add("dragging");e.dataTransfer.effectAllowed="move";try{e.dataTransfer.setData("text/plain",drag)}catch(_){}});
