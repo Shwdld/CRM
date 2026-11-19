@@ -566,6 +566,9 @@ const actv=c=>cboard(c)==="pipe"?"pipeline":(c.activation&&ACT[c.activation]?c.a
 const onBoard=c=>cboard(c)==="prospect"&&["semaine","actif"].includes(actv(c));
 const boardAccounts=()=>new Set(S.contacts.filter(onBoard).map(c=>compteKey(c)||c.id));
 const weekUsed=()=>S.contacts.filter(c=>c.activeLe&&c.activeLe>=monday()).length;
+const awaitingOpp=c=>cstage(c)==="pipeline"&&!S.opps.some(o=>o.contactId===c.id&&OPEN.includes(ostage(o)));
+/* « suivi » = ce qui a une prochaine action pertinente (activé, réactivation en pause, ou a répondu sans opportunité) */
+const isTracked=c=>onBoard(c)||(actv(c)==="pause"&&DORMANT_C.includes(cstage(c)))||awaitingOpp(c);
 const isDue=c=>(cstage(c)==="pipeline"&&!S.opps.some(o=>o.contactId===c.id&&OPEN.includes(ostage(o)))&&c.next&&c.next.date&&c.next.date<=today())||cboard(c)==="prospect"&&c.next&&c.next.date&&c.next.date<=today()&&(onBoard(c)||(actv(c)==="pause"&&DORMANT_C.includes(cstage(c))));
 function suggestScore(c){let s=0;if(actv(c)==="mois")s+=5;if((c.relances||0)>0)s+=3;s+={chaud:4,tiede:2,froid:0,dormant:-1}[chaleur(c)]||0;
   if(["tiede","ancien_client"].includes(c.type))s+=2;if(["reco","intro","inbound"].includes(c.source))s+=2;if(c.email||c.linkedin)s+=1;if(c.next&&c.next.date&&c.next.date<=today())s+=1;return s}
@@ -862,7 +865,7 @@ function blocPipe(){
 }
 function blocTimeline(){
   const t=today(),N=S.home.weeks*7;const days=[];for(let i=0;i<N;i++)days.push(addDays(t,i));const end=days[days.length-1];
-  const C=S.contacts.filter(c=>(onBoard(c)||(actv(c)==="pause"&&DORMANT_C.includes(cstage(c))))&&c.next&&c.next.date&&c.next.date<=end).map(c=>({id:c.id,k:"c",date:c.next.date,label:c.next.label,who:cname(c),col:ccolor(c),late:cLate(c),row:DORMANT_C.includes(cstage(c))?"react":"relances"}));
+  const C=S.contacts.filter(c=>isTracked(c)&&c.next&&c.next.date&&c.next.date<=end).map(c=>({id:c.id,k:"c",date:c.next.date,label:c.next.label,who:cname(c),col:ccolor(c),late:cLate(c),row:DORMANT_C.includes(cstage(c))?"react":awaitingOpp(c)?"calls":"relances"}));
   const O=S.opps.filter(o=>(OPEN.includes(ostage(o))||ostage(o)==="perdu")&&o.next&&o.next.date&&o.next.date<=end).map(o=>({id:o.id,k:"o",date:o.next.date,label:o.next.label,who:o.nom,col:ocolor(o),late:oLate(o),row:ostage(o)==="perdu"?"react":["repondu","qualification"].includes(ostage(o))?"calls":"props"}));
   const items=[...C,...O];
   const rows=[{k:"relances",l:"Relances",c:"--c-relance"},{k:"calls",l:"Calls",c:"--c-qualif"},{k:"props",l:"Propositions",c:"--c-attente"},{k:"react",l:"Réactivations",c:"--c-react"}];
@@ -935,12 +938,16 @@ function pcardC(c){
 
 /* ───────── RELANCES DUES ───────── */
 function vDues(){
-  const items=questItems(),late=items.filter(i=>i.late),now=items.filter(i=>!i.late);
+  const items=questItems(),late=items.filter(i=>i.late),now=items.filter(i=>!i.late),wk=addDays(today(),7);
+  const soon=[...S.contacts.filter(c=>isTracked(c)&&c.next&&c.next.date>today()&&c.next.date<=wk).map(c=>({k:"c",x:c,late:false})),
+    ...S.opps.filter(o=>OPEN.includes(ostage(o))&&o.next&&o.next.date>today()&&o.next.date<=wk).map(o=>({k:"o",x:o,late:false}))].sort((a,b)=>a.x.next.date.localeCompare(b.x.next.date));
+  const soonRow=it=>{const x=it.x,isC=it.k==="c",c=isC?x:oContact(x);return`<div class="sib" ${isC?`data-open="${x.id}"`:`data-openo="${x.id}"`}>${isC?avC(x,"sm"):avO(x,"sm")}<div class="grow"><b>${esc(quest(it).t)}</b> <span class="muted">· ${esc(x.next.label||"")}</span></div><span class="pill">${rel(x.next.date)}</span></div>`};
   const hidden=S.contacts.filter(c=>cboard(c)==="prospect"&&!isDue(c)&&c.next&&c.next.date&&c.next.date<=today()).length;
   const sec=(t,l)=>l.length?`<section class="block folder" style="--tab-w:24%"><div class="b-h"><div><h2>${t}</h2><p>${plural(l.length,"action")} · triées par priorité</p></div></div><div class="quests">${l.map(questRow).join("")}</div></section>`:"";
-  return head("Relances <em>dues</em>","Uniquement les prospects activés et les opportunités dont l'action est échue ou prévue aujourd'hui.")
+  return head("Relances <em>dues</em>","Prospects activés, contacts qui ont répondu et opportunités dont l'action est échue ou prévue aujourd'hui, puis ce qui arrive dans la semaine.")
    +`<div style="display:flex;flex-direction:column;gap:46px;margin-top:32px">`
    +(items.length?sec("En retard",late)+sec("Aujourd'hui",now):`<section class="block folder"><div class="b-h"><div><h2>Rien de dû</h2><p>Toutes les relances sont à jour. Activez de nouveaux prospects depuis la Prospection si vous avez de la place.</p></div></div></section>`)
+   +(soon.length?`<section class="block folder" style="--tab-w:24%"><div class="b-h"><div><h2>À venir</h2><p>Les 7 prochains jours · pour anticiper</p></div></div><div class="sibs">${soon.map(soonRow).join("")}</div></section>`:"")
    +`</div>`+(hidden?`<p class="muted" style="margin-top:16px;font-size:12.5px">${plural(hidden,"contact")} du backlog ou de « Ce mois-ci » ont une date passée : ils n'apparaissent pas ici tant qu'ils ne sont pas activés. <button class="lnk" data-actfilter="backlog">Voir la base</button></p>`:"");
 }
 
@@ -951,9 +958,13 @@ function vPipeline(){
   const cols=PIPE.map(s=>{const os=list.filter(o=>ostage(o)===s.k).sort((a,b)=>pondere(b)-pondere(a));
     const sum=os.reduce((t,o)=>t+(+o.valeur||0),0),pd=os.reduce((t,o)=>t+pondere(o),0);
     return`<div class="col folder" data-drop="${s.k}">${colHead(s,os.length,sum&&s.k!=="perdu"?` · ${keur(sum)}${OPEN.includes(s.k)?" · pondéré "+keur(pd):""}`:"")}${os.map(pcardO).join("")}</div>`}).join("");
+  const q=S.filters.q.trim().toLowerCase();
+  const waiting=S.contacts.filter(awaitingOpp).filter(c=>!q||[c.nom,c.studio,compteName(c)].join(" ").toLowerCase().includes(q)).sort((a,b)=>((a.next&&a.next.date)||"9").localeCompare((b.next&&b.next.date)||"9"));
+  const qualif=`<div class="col archive folder">${colHead({l:"À qualifier",c:"--c-conv",d:"Ont répondu, sans opportunité. Créez-la depuis la fiche si un besoin se confirme."},waiting.length)}
+    ${waiting.map(c=>`<div class="arch" data-open="${c.id}"><i class="dot" style="--c:var(${cLate(c)?"--late":"--c-conv"})"></i><b>${esc(cname(c))}</b><small class="${cLate(c)?"late":""}">${c.next&&c.next.date?rel(c.next.date):"—"}</small></div>`).join("")}</div>`;
   return head("Pipeline","Une carte = une opportunité (un besoin, une mission). Une même entreprise peut en avoir plusieurs.",`<button class="btn primary" data-act="new-opp">+ Opportunité</button>`)
    +legacyNotice()+`<div class="toolbar"><input type="search" id="f-q" placeholder="Rechercher une opportunité, un account…" value="${esc(S.filters.q)}"></div>`
-   +`<div class="board-wrap"><div class="board">${cols}</div></div>`;
+   +`<div class="board-wrap"><div class="board">${qualif}${cols}</div></div>`;
 }
 function pcardO(o){
   const c=oContact(o),p=proba(o),on=Math.round(p/20);
@@ -1469,9 +1480,10 @@ document.addEventListener("click",async e=>{
     const q=quest({k,x});const row=qd.closest(".q");if(row)row.classList.add("gone");
     setTimeout(async()=>{const ok=k==="c"?await runC(x,q.ev,true):await runO(x,q.ev,true);if(ok)toast("+"+q.xp+" pt"+(q.xp>1?"s":"")+" · "+q.t,"xp")},220);return}
   const pr=t.closest("[data-principal]");if(pr){await setPrincipal(S.L.id,pr.dataset.principal);return}
-  const cev=t.closest("[data-cev]");if(cev){const c=S.contacts.find(x=>x.id===cev.dataset.id);if(!c)return;const f=await saveContact(true);if(f===null)return;await runC({...c,...f},cev.dataset.cev);return}
-  const oev=t.closest("[data-oev]");if(oev){const o=S.opps.find(x=>x.id===oev.dataset.id);if(!o)return;const typed=S.dirty&&("o-nextlabel" in S.dirty||"o-nextdate" in S.dirty);
-    const b=await saveOpp(true);if(b===null)return;await runO({...o,...b},oev.dataset.oev,false,typed&&b.next&&!["signe","perdu"].includes(oev.dataset.oev)?b.next:null);return}
+  const cev=t.closest("[data-cev]");if(cev){const c=S.contacts.find(x=>x.id===cev.dataset.id);if(!c)return;const typed=S.dirty&&("c-nextlabel" in S.dirty||"c-nextdate" in S.dirty),lt=S.dirty&&"c-nextlabel" in S.dirty;const f=await saveContact(true);if(f===null)return;
+    await runC({...c,...f},cev.dataset.cev,false,typed&&f.next&&cev.dataset.cev!=="envoye"?{...f.next,lt}:null);return}
+  const oev=t.closest("[data-oev]");if(oev){const o=S.opps.find(x=>x.id===oev.dataset.id);if(!o)return;const typed=S.dirty&&("o-nextlabel" in S.dirty||"o-nextdate" in S.dirty),lt=S.dirty&&"o-nextlabel" in S.dirty;
+    const b=await saveOpp(true);if(b===null)return;await runO({...o,...b},oev.dataset.oev,false,typed&&b.next&&!["signe","perdu"].includes(oev.dataset.oev)?{...b.next,lt}:null);return}
   const sn=t.closest("[data-snooze]");if(sn){const[k,id]=sn.dataset.snooze.split(":");const x=(k==="c"?S.contacts:S.opps).find(y=>y.id===id);
     if(x&&x.next){await save(k==="c"?"contacts":"opps",x.id,{next:{...x.next,date:addDays(x.next.date<today()?today():x.next.date,3)}});toast("Reporté de 3 jours")}return}
   const oc=t.closest("[data-openc]");if(oc){e.preventDefault();open("compte",oc.dataset.openc);return}
@@ -1536,10 +1548,10 @@ function fillSuggestions(){
   return{room,picks};
 }
 async function saveObj(o,msg){S.obj=o;render();if(S.db){try{await S.db.doc("reglages/objectifs").set(o);toast(msg)}catch(_){toast("Non enregistré. Réessayez.")}}}
-async function runC(c,ev,quiet){
+async function runC(c,ev,quiet,keepNext){
   const opts={};const nd=document.getElementById("c-nextdate");
   if((ev==="reactiver"||ev==="sommeil")&&nd&&nd.value&&nd.value>today())opts.date=nd.value;
-  const p=applyC(c,ev,opts);
+  const p=applyC(c,ev,opts);if(keepNext)p.next={date:keepNext.date,label:keepNext.lt||!p.next?keepNext.label:p.next.label};
   if(!(await save("contacts",c.id,p)))return false;
   if(ev==="repondu"){let cid=compteKey(c);if(cid&&cid.startsWith("v:"))cid=await ensureCompte(c.studio);if(cid&&cid!==c.compteId)await save("contacts",c.id,{compteId:cid});
     toast("Noté : a répondu. Créez une opportunité depuis la fiche si un besoin se confirme.","xp");return true}
@@ -1547,7 +1559,7 @@ async function runC(c,ev,quiet){
   return true;
 }
 async function runO(o,ev,quiet,keepNext){
-  const p=applyO(o,ev);if(keepNext)p.next=keepNext;
+  const p=applyO(o,ev);if(keepNext)p.next={date:keepNext.date,label:keepNext.lt||!p.next?keepNext.label:p.next.label};
   if(!(await save("opps",o.id,p)))return false;
   if(ev==="signe"){const pid=uid();await save("projets",pid,{titre:o.nom,client:oCompteName(o),oppId:o.id,montant:+o.valeur||0,stage:"production",demarrage:o.dateDemarrage||"",services:[],cree:today(),exemple:!!o.exemple},true);toast("Signé ! Le projet est créé dans « Projets ».","xp")}
   else if(ev==="perdu"){open("opp",o.id);toast("Notez la raison dans la fiche");setTimeout(()=>{const r=document.getElementById("o-raison");if(r)r.focus()},80)}
