@@ -469,6 +469,9 @@ const PROSPECT=[
   {k:"sommeil",l:"Sommeil",c:"--c-sommeil",d:"Relances finies sans réponse · pause volontaire"},
   {k:"reactiver",l:"À réactiver",c:"--c-react",d:"À reprendre avec un nouvel angle ou à une date choisie"},
 ];
+/* Niveau d'activation : seul ce qui est activé apparaît dans le board et les relances dues */
+const ACT={backlog:{l:"Backlog",c:"--c-todo"},mois:{l:"Ce mois-ci",c:"--c-react"},semaine:{l:"Cette semaine",c:"--c-contact"},actif:{l:"Actif maintenant",c:"--c-conv"},pause:{l:"En pause",c:"--c-sommeil"}};
+const LIM={week:10,accounts:20};
 const C_STAGE=Object.fromEntries([...PROSPECT,{k:"pipeline",l:"En pipeline",c:"--c-conv"}].map(s=>[s.k,s]));
 /* Opportunités : board Pipeline */
 const PIPE=[
@@ -552,6 +555,15 @@ function chaleur(c){
   if(c.type==="tiede"||c.type==="ancien_client")return"tiede";
   return"froid";
 }
+const actv=c=>cboard(c)==="pipe"?"pipeline":(c.activation&&ACT[c.activation]?c.activation:(DORMANT_C.includes(cstage(c))?"pause":"backlog"));
+const onBoard=c=>cboard(c)==="prospect"&&["semaine","actif"].includes(actv(c));
+const boardAccounts=()=>new Set(S.contacts.filter(onBoard).map(c=>compteKey(c)||c.id));
+const weekUsed=()=>S.contacts.filter(c=>c.activeLe&&c.activeLe>=monday()).length;
+const isDue=c=>cboard(c)==="prospect"&&c.next&&c.next.date&&c.next.date<=today()&&(onBoard(c)||(actv(c)==="pause"&&DORMANT_C.includes(cstage(c))));
+function suggestScore(c){let s=0;if(actv(c)==="mois")s+=5;if((c.relances||0)>0)s+=3;s+={chaud:4,tiede:2,froid:0,dormant:-1}[chaleur(c)]||0;
+  if(["tiede","ancien_client"].includes(c.type))s+=2;if(["reco","intro","inbound"].includes(c.source))s+=2;if(c.email||c.linkedin)s+=1;if(c.next&&c.next.date&&c.next.date<=today())s+=1;return s}
+function suggestReason(c){const r=[];if(actv(c)==="mois")r.push("prévu ce mois-ci");if((c.relances||0)>0)r.push("déjà contacté");if(["reco","intro","inbound"].includes(c.source))r.push(SOURCES[c.source].toLowerCase());
+  if(["tiede","ancien_client"].includes(c.type))r.push(TYPES[c.type].toLowerCase());if(chaleur(c)==="chaud"||chaleur(c)==="tiede")r.push(CHALEURS[chaleur(c)].toLowerCase());return r.join(" · ")||"à découvrir"}
 const cLate=c=>!!(c.next&&c.next.date&&c.next.date<today());
 function lastOf(hist){const h=(hist||[]).find(x=>!/^Fiche créée/.test(x.t));return h||null}
 function lastContact(c){const all=[lastOf(c.hist),...oppsOf(c).map(o=>lastOf(o.hist))].filter(Boolean).sort((a,b)=>b.d.localeCompare(a.d));return all[0]||null}
@@ -581,11 +593,12 @@ function applyC(c,ev,opts={}){
   switch(ev){
     case"envoye":{const fresh=DORMANT_C.includes(cstage(c))||cstage(c)==="pipeline";const n=fresh?1:(c.relances||0)+1;p.relances=n;
       log(fresh?"Message de réactivation envoyé":n===1?"Premier message envoyé":"Relance "+(n-1)+" envoyée");
-      const r=rythme(c,n,t);p.stage=r.stage;p.next=r.next;if(r.stage==="sommeil")log("Pas de réponse après 3 relances · mise en sommeil");break}
-    case"sommeil":p.stage="sommeil";p.next={date:opts.date||addDays(t,75),label:"Fin de la pause : réactiver ?"};log("Mis en sommeil");break;
-    case"reactiver":p.stage="reactiver";p.next={date:opts.date||addDays(t,30),label:"Réactiver avec un nouvel angle"};log("À réactiver");break;
+      const r=rythme(c,n,t);p.stage=r.stage;p.next=r.next;if(fresh){p.activation="actif";if(!(c.activeLe>=monday()))p.activeLe=t}
+      if(r.stage==="sommeil"){p.activation="pause";log("Pas de réponse après 3 relances · mise en sommeil · place libérée")}break}
+    case"sommeil":p.stage="sommeil";p.activation="pause";p.next={date:opts.date||addDays(t,75),label:"Fin de la pause : réactiver ?"};log("Mis en sommeil");break;
+    case"reactiver":p.stage="reactiver";p.activation="pause";p.next={date:opts.date||addDays(t,30),label:"Réactiver avec un nouvel angle"};log("À réactiver");break;
     case"a_contacter":p.stage="a_contacter";p.next={date:t,label:"Envoyer le premier message"};break;
-    case"repondu":p.stage="pipeline";p.next=null;p.converti=t;log("A répondu · opportunité créée");break;
+    case"repondu":p.stage="pipeline";p.activation="";p.next=null;p.converti=t;log("A répondu · opportunité créée");break;
     case"suivi":p.next={date:addDays(t,7),label:(c.next&&c.next.label)||"Suivi"};log("Suivi · "+((c.next&&c.next.label)||"contact"));break;
   }
   p.hist=h.slice(0,60);p.maj=t;return p;
@@ -653,8 +666,8 @@ function accounts(){
 const siblings=c=>{const k=compteKey(c);return k?S.contacts.filter(x=>x.id!==c.id&&compteKey(x)===k):[]};
 
 /* ───────── État & stockage ───────── */
-const S={contacts:[],projets:[],comptes:[],opps:[],obj:{},view:"today",filters:{q:"",type:"",source:"",board:"",chaleur:""},sort:{k:"next",dir:1},
-  home:{weeks:2,editGoals:false,showAll:false},fc:{period:"mois",edit:false},ready:false,db:null,L:null};
+const S={contacts:[],projets:[],comptes:[],opps:[],obj:{},view:"today",filters:{q:"",type:"",source:"",board:"",chaleur:"",act:""},sort:{k:"next",dir:1},
+  home:{weeks:2,editGoals:false,showAll:false},sel:new Set(),fill:false,fc:{period:"mois",edit:false},ready:false,db:null,L:null};
 const esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
 const norm=s=>(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/\(exemple\)/g,"").replace(/[^a-z0-9]+/g," ").trim();
 const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
@@ -689,11 +702,11 @@ async function boot(){
 }
 
 /* ───────── Navigation & thème ───────── */
-const VIEWS=[["today","Dashboard"],["prospect","Prospection"],["pipeline","Pipeline"],["comptes","Accounts"],["contacts","Contacts"],["projets","Projets"],["forecast","Revenue forecast"],["import","Importer"]];
-function dueCount(){return S.contacts.filter(c=>cboard(c)==="prospect"&&c.next&&c.next.date&&c.next.date<=today()).length+S.opps.filter(o=>OPEN.includes(ostage(o))&&o.next&&o.next.date&&o.next.date<=today()).length}
+const VIEWS=[["today","Dashboard"],["dues","Relances dues"],["prospect","Prospection"],["pipeline","Pipeline"],["comptes","Accounts"],["contacts","Base de contacts"],["projets","Projets"],["forecast","Revenue forecast"],["import","Importer"]];
+function dueCount(){return S.contacts.filter(isDue).length+S.opps.filter(o=>OPEN.includes(ostage(o))&&o.next&&o.next.date&&o.next.date<=today()).length}
 function renderNav(){
   const due=dueCount();
-  document.getElementById("nav").innerHTML=VIEWS.map(([k,l])=>`<button data-v="${k}" ${S.view===k?'aria-current="page"':""}>${l}<span class="count">${k==="today"&&due?due:""}</span></button>`).join("");
+  document.getElementById("nav").innerHTML=VIEWS.map(([k,l])=>`<button data-v="${k}" ${S.view===k?'aria-current="page"':""}>${l}<span class="count">${k==="dues"&&due?due:""}</span></button>`).join("");
 }
 function go(v){S.view=v;location.hash=v;render();window.scrollTo(0,0)}
 document.getElementById("nav").addEventListener("click",e=>{const b=e.target.closest("button[data-v]");if(b)go(b.dataset.v)});
@@ -773,7 +786,7 @@ function vToday(){
 /* Quêtes : contacts en prospection + opportunités ouvertes dont l'action est due */
 function questItems(){
   const t=today();
-  const cs=S.contacts.filter(c=>cboard(c)==="prospect"&&c.next&&c.next.date&&c.next.date<=t).map(c=>({k:"c",x:c,late:cLate(c),prio:({froid:2,tiede:4,chaud:6,dormant:1}[chaleur(c)]||2)+(cLate(c)?2:0)}));
+  const cs=S.contacts.filter(isDue).map(c=>({k:"c",x:c,late:cLate(c),prio:({froid:2,tiede:4,chaud:6,dormant:1}[chaleur(c)]||2)+(cLate(c)?2:0)}));
   const os=S.opps.filter(o=>OPEN.includes(ostage(o))&&o.next&&o.next.date&&o.next.date<=t).map(o=>({k:"o",x:o,late:oLate(o),prio:6+RANK[ostage(o)]+(oLate(o)?2:0)}));
   return[...os,...cs].sort((a,b)=>b.prio-a.prio);
 }
@@ -819,15 +832,15 @@ function questRow(it){
   </div>`;
 }
 function blocPipe(){
-  const parts=[...PROSPECT.map(s=>({s,n:S.contacts.filter(c=>cstage(c)===s.k).length})),...PIPE.map(s=>({s,n:S.opps.filter(o=>ostage(o)===s.k).length}))].filter(x=>x.n);
-  const pros=S.contacts.filter(c=>cboard(c)==="prospect"),open=S.opps.filter(o=>OPEN.includes(ostage(o)));
+  const parts=[...PROSPECT.map(s=>({s,n:S.contacts.filter(c=>onBoard(c)&&cstage(c)===s.k).length})),...PIPE.map(s=>({s,n:S.opps.filter(o=>ostage(o)===s.k).length}))].filter(x=>x.n);
+  const pros=S.contacts.filter(onBoard),backlogN=S.contacts.filter(c=>actv(c)==="backlog").length,open=S.opps.filter(o=>OPEN.includes(ostage(o)));
   const brut=open.reduce((t,o)=>t+(+o.valeur||0),0),pond=open.reduce((t,o)=>t+pondere(o),0);
   const proDue=pros.filter(c=>c.next&&c.next.date<=today()).length;
   return`<section class="block folder span-12"><div class="b-h"><div><h2>Le pipe</h2><p>${pros.length} prospects · ${open.length} opportunités ouvertes${brut?` · ${keur(brut)} brut · ${keur(pond)} pondéré`:""}</p></div></div>
     <div class="stack" role="img" aria-label="Répartition par étape">${parts.map(x=>`<i style="--c:var(${x.s.c});flex:${x.n}" title="${x.s.l} : ${x.n}"></i>`).join("")}</div>
     <div class="stack-leg">${parts.map(x=>`<span><i class="dot" style="--c:var(${x.s.c})"></i>${x.s.l} <b>${x.n}</b></span>`).join("")}</div>
     <div class="boards">
-      <a class="bcard notched" href="#prospect">${NOTCH_STATIC}<b>Prospection <em>&amp; relances</em></b><small>${pros.length} prospects · ${proDue} à jouer aujourd'hui</small>
+      <a class="bcard notched" href="#prospect">${NOTCH_STATIC}<b>Prospection <em>&amp; relances</em></b><small>${pros.length} activés · ${proDue} à jouer aujourd'hui · ${backlogN} en backlog</small>
         <div class="dots">${PROSPECT.map(s=>`<i style="--c:var(${s.c})"></i>`).join("")}</div></a>
       <a class="bcard notched" href="#pipeline">${NOTCH_STATIC}<b>Pipeline</b><small>${open.length} opportunités${brut?" · "+keur(brut):""} · ${S.opps.filter(o=>ostage(o)==="signe").length} signée(s)</small>
         <div class="dots">${PIPE.map(s=>`<i style="--c:var(${s.c})"></i>`).join("")}</div></a>
@@ -836,7 +849,7 @@ function blocPipe(){
 }
 function blocTimeline(){
   const t=today(),N=S.home.weeks*7;const days=[];for(let i=0;i<N;i++)days.push(addDays(t,i));const end=days[days.length-1];
-  const C=S.contacts.filter(c=>cboard(c)==="prospect"&&c.next&&c.next.date&&c.next.date<=end).map(c=>({id:c.id,k:"c",date:c.next.date,label:c.next.label,who:cname(c),col:ccolor(c),late:cLate(c),row:DORMANT_C.includes(cstage(c))?"react":"relances"}));
+  const C=S.contacts.filter(c=>(onBoard(c)||(actv(c)==="pause"&&DORMANT_C.includes(cstage(c))))&&c.next&&c.next.date&&c.next.date<=end).map(c=>({id:c.id,k:"c",date:c.next.date,label:c.next.label,who:cname(c),col:ccolor(c),late:cLate(c),row:DORMANT_C.includes(cstage(c))?"react":"relances"}));
   const O=S.opps.filter(o=>(OPEN.includes(ostage(o))||ostage(o)==="perdu")&&o.next&&o.next.date&&o.next.date<=end).map(o=>({id:o.id,k:"o",date:o.next.date,label:o.next.label,who:o.nom,col:ocolor(o),late:oLate(o),row:ostage(o)==="perdu"?"react":["repondu","qualification"].includes(ostage(o))?"calls":"props"}));
   const items=[...C,...O];
   const rows=[{k:"relances",l:"Relances",c:"--c-relance"},{k:"calls",l:"Calls",c:"--c-qualif"},{k:"props",l:"Propositions",c:"--c-attente"},{k:"react",l:"Réactivations",c:"--c-react"}];
@@ -868,15 +881,29 @@ function tagFilters(withBoard){
     <div class="tags"><span class="label">Source</span>${Object.entries(SOURCES).map(([k,l])=>chip("source",k,l)).join("")}</div>`;
 }
 function colHead(s,n,extra=""){return`<div class="col-h"><div class="t"><span><i class="dot" style="--c:var(${s.c})"></i>${s.l}</span><em>${n}</em></div><small>${s.d}${extra}</small></div><div class="col-bar" style="--c:var(${s.c})"></div>`}
+function activationPanel(){
+  const used=weekUsed(),accs=boardAccounts().size,mois=S.contacts.filter(c=>actv(c)==="mois").length,back=S.contacts.filter(c=>actv(c)==="backlog").length,pause=S.contacts.filter(c=>actv(c)==="pause").length;
+  const g=(v,max,l,c)=>`<div class="goal" style="--c:var(${v>=max?"--late":c})"><div class="top"><span>${l}</span><b>${v}<small> / ${max}</small></b></div><div class="chunk" style="background:var(--line-soft)"><i style="width:${Math.min(100,v/max*100)}%"></i></div></div>`;
+  let fill="";
+  if(S.fill){const f=fillSuggestions();
+    fill=f.room?`<div class="sibs">${f.picks.map(c=>`<label class="sib" style="cursor:pointer"><input type="checkbox" class="fill-pick" value="${c.id}" checked>${avC(c,"sm")}<div class="grow"><b>${esc(cname(c))}</b> <span class="muted">${esc(compteName(c))}${compteName(c)?" · ":""}${esc(suggestReason(c))}</span></div>${ctag(c)}</label>`).join("")||`<div class="muted">Plus rien en backlog.</div>`}</div>
+      <div class="actions"><button class="btn primary" data-act="fill-go">Activer la sélection</button><button class="btn ghost" data-act="fill-close">Fermer</button><span class="muted" style="font-size:12px">Place disponible cette semaine : ${f.room}</span></div>`
+      :`<div class="alert">Limite atteinte. Avancez les prospects actifs ou mettez-en en pause pour libérer de la place.</div><div><button class="btn ghost sm" data-act="fill-close">Fermer</button></div>`}
+  return`<section class="block folder" style="margin-bottom:46px;--tab-w:30%"><div class="b-h"><div><h2>Activation</h2><p>Le board n'affiche que les prospects activés (cette semaine ou actifs). Tout le reste attend dans la base.</p></div>
+      <div class="actions"><button class="btn primary" data-act="fill-open">Remplir ma semaine</button><button class="btn" data-goto="contacts">Gérer la base</button></div></div>
+    <div class="goals" style="color:var(--fg)">${g(accs,LIM.accounts,"Comptes actifs dans le board","--c-conv")}${g(used,LIM.week,"Nouveaux prospects activés cette semaine","--c-contact")}</div>
+    <div class="qsum">${[["mois",mois],["backlog",back],["pause",pause]].map(([k,n])=>`<button class="pill" data-actfilter="${k}" style="padding:5px 12px"><i class="dot" style="--c:var(${ACT[k].c})"></i>${ACT[k].l} <b style="margin-left:4px">${n}</b></button>`).join("")}</div>
+    ${fill}</section>`;
+}
 function vProspect(){
-  const list=filteredC();
+  const list=filteredC().filter(c=>onBoard(c)||cboard(c)==="pipe");
   const cols=PROSPECT.map(s=>{const cs=list.filter(c=>cstage(c)===s.k).sort((a,b)=>((a.next&&a.next.date)||"9").localeCompare((b.next&&b.next.date)||"9"));
     return`<div class="col folder" data-drop="${s.k}">${colHead(s,cs.length)}${cs.map(pcardC).join("")}</div>`}).join("");
   const conv=list.filter(c=>cboard(c)==="pipe").sort((a,b)=>(b.converti||b.maj||"").localeCompare(a.converti||a.maj||""));
   const archive=`<div class="col archive folder" data-drop="converti">${colHead({l:"Converti en opportunité",c:"--c-conv",d:"A répondu · l'opportunité suit son cours dans le Pipeline."},conv.length)}
     ${conv.slice(0,40).map(c=>{const o=oppsOf(c)[0];return`<div class="arch" ${o?`data-openo="${o.id}"`:`data-open="${c.id}"`}><i class="dot" style="--c:var(${o?ocolor(o):"--c-conv"})"></i><b>${esc(cname(c))}</b><small>${o?esc(olabel(o)):"—"}</small></div>`}).join("")}</div>`;
   return head("Prospection <em>&amp; relances</em>","Glissez une carte : la prochaine relance se calcule toute seule. Dès qu'un contact répond, son opportunité part dans le Pipeline.",`<button class="btn primary" data-act="new-contact">+ Contact</button>`)
-   +legacyNotice()+tagFilters(false)+`<div class="board-wrap"><div class="board">${cols}${archive}</div></div>`;
+   +legacyNotice()+activationPanel()+tagFilters(false)+`<div class="board-wrap"><div class="board">${cols}${archive}</div></div>`;
 }
 function pcardC(c){
   const h=chaleur(c),on={froid:1,tiede:3,chaud:5,dormant:0}[h];const sib=siblings(c).length,k=compteKey(c);
@@ -885,12 +912,23 @@ function pcardC(c){
   return`<div class="pc notched" draggable="true" data-card="c:${c.id}" data-open="${c.id}">
     <div class="pc-body">${avC(c)}
       <div class="pc-name">${esc(cname(c))}</div>
-      <div class="pc-sub"><span>${esc(sub)}</span>${sib&&k?`<button class="pc-sib" data-openc="${esc(k)}" title="Voir l'account">+${sib} même account</button>`:""}</div>
+      <div class="pc-sub"><span>${esc(sub)}</span>${actv(c)==="semaine"?`<span class="pc-sib">Cette semaine</span>`:""}${sib&&k?`<button class="pc-sib" data-openc="${esc(k)}" title="Voir l'account">+${sib} même account</button>`:""}</div>
       ${next}
       <div class="pc-foot"><div><div class="k">Source</div><span class="pc-pill">${esc(SOURCES[c.source]||"—")}</span></div>
         <div class="r"><div class="k">Chaleur · ${CHALEURS[h]}</div><span class="pc-dots">${[1,2,3,4,5].map(i=>`<i class="${i<=on?"on":""}"></i>`).join("")}</span></div></div>
     </div>${notch("Ouvrir la fiche",`data-open="${c.id}"`)}
   </div>`;
+}
+
+/* ───────── RELANCES DUES ───────── */
+function vDues(){
+  const items=questItems(),late=items.filter(i=>i.late),now=items.filter(i=>!i.late);
+  const hidden=S.contacts.filter(c=>cboard(c)==="prospect"&&!isDue(c)&&c.next&&c.next.date&&c.next.date<=today()).length;
+  const sec=(t,l)=>l.length?`<section class="block folder" style="--tab-w:24%"><div class="b-h"><div><h2>${t}</h2><p>${plural(l.length,"action")} · triées par priorité</p></div></div><div class="quests">${l.map(questRow).join("")}</div></section>`:"";
+  return head("Relances <em>dues</em>","Uniquement les prospects activés et les opportunités dont l'action est échue ou prévue aujourd'hui.")
+   +`<div style="display:flex;flex-direction:column;gap:46px;margin-top:32px">`
+   +(items.length?sec("En retard",late)+sec("Aujourd'hui",now):`<section class="block folder"><div class="b-h"><div><h2>Rien de dû</h2><p>Toutes les relances sont à jour. Activez de nouveaux prospects depuis la Prospection si vous avez de la place.</p></div></div></section>`)
+   +`</div>`+(hidden?`<p class="muted" style="margin-top:16px;font-size:12.5px">${plural(hidden,"contact")} du backlog ou de « Ce mois-ci » ont une date passée : ils n'apparaissent pas ici tant qu'ils ne sont pas activés. <button class="lnk" data-actfilter="backlog">Voir la base</button></p>`:"");
 }
 
 /* ───────── PIPELINE (opportunités) ───────── */
@@ -946,20 +984,23 @@ function acctCard(a){
 
 /* ───────── CONTACTS (liste) ───────── */
 function vContacts(){
-  const list=filteredC();const {k,dir}=S.sort;
+  const list=filteredC().filter(c=>!S.filters.act||actv(c)===S.filters.act);const {k,dir}=S.sort;
   const val={nom:c=>cname(c).toLowerCase(),studio:c=>compteName(c).toLowerCase(),next:c=>c.next&&c.next.date||"9999",last:c=>(lastContact(c)||{}).d||"0000"}[k];
   list.sort((a,b)=>{const x=val(a),y=val(b);return(x>y?1:x<y?-1:0)*dir});
   const th=(key,l)=>`<th data-sort="${key}">${l}${k===key?(dir>0?" ↑":" ↓"):""}</th>`;
-  return head("Contacts",`${S.contacts.length} personnes`,`<button class="btn primary" data-act="new-contact">+ Contact</button>`)
-   +tagFilters(true)
-   +`<div class="table-wrap"><table><thead><tr>${th("nom","Nom")}${th("studio","Entreprise")}<th>Poste</th><th>Type</th><th>Source</th><th>Board</th><th>Chaleur</th>${th("last","Dernier contact")}<th>Prochaine action</th>${th("next","Date")}<th>Pays</th></tr></thead><tbody>
+  const cnt=k=>S.contacts.filter(c=>actv(c)===k).length;
+  const bulk=S.sel.size?`<div class="notice" style="position:sticky;top:12px;z-index:5"><span><b style="color:var(--fg)">${S.sel.size}</b> sélectionné(s) · passer en :</span><span class="actions">${Object.entries(ACT).map(([k,a])=>`<button class="btn sm" data-bulk="${k}"><i class="dot" style="--c:var(${a.c})"></i>${a.l}</button>`).join("")}<button class="btn sm ghost" data-act="sel-clear">Annuler</button></span></div>`:"";
+  return head("Base <em>de contacts</em>",`${S.contacts.length} personnes · board limité à ${LIM.accounts} comptes actifs et ${LIM.week} activations par semaine`,`<button class="btn primary" data-act="new-contact">+ Contact</button>`)
+   +`<div class="tags"><span class="label">Activation</span>${Object.entries(ACT).map(([k,a])=>`<button class="pill" data-filter="act:${k}" aria-pressed="${S.filters.act===k}"><i class="dot" style="--c:var(${a.c})"></i>${a.l} · ${cnt(k)}</button>`).join("")}<button class="pill" data-filter="act:pipeline" aria-pressed="${S.filters.act==="pipeline"}">Pipeline · ${cnt("pipeline")}</button></div>`
+   +tagFilters(true)+bulk
+   +`<div class="table-wrap"><table><thead><tr><th><input type="checkbox" id="sel-all" aria-label="Tout sélectionner" ${list.length&&list.every(c=>S.sel.has(c.id))?"checked":""}></th>${th("nom","Nom")}${th("studio","Entreprise")}<th>Poste</th><th>Activation</th><th>Type</th><th>Source</th><th>Board</th><th>Chaleur</th>${th("last","Dernier contact")}<th>Prochaine action</th>${th("next","Date")}<th>Pays</th></tr></thead><tbody>
    ${list.map(c=>{const k2=compteKey(c),lc=lastContact(c),ex=c.exemple?' <span style="color:var(--faint);font-size:11px">exemple</span>':"";
-     return`<tr data-open="${c.id}"><td><span class="nm"><i class="dot" style="--c:var(${ccolor(c)})"></i>${esc(cname(c))}</span></td>
+     return`<tr data-open="${c.id}"><td data-nosel><input type="checkbox" class="sel" value="${c.id}" ${S.sel.has(c.id)?"checked":""} aria-label="Sélectionner"></td><td><span class="nm"><i class="dot" style="--c:var(${ccolor(c)})"></i>${esc(cname(c))}</span></td>
      <td>${k2?`<button class="lnk" data-openc="${esc(k2)}">${esc(compteName(c))}</button>${siblings(c).length?` <span class="pill">+${siblings(c).length}</span>`:""}`:"—"}${ex}</td>
-     <td>${esc(c.poste||"—")}</td><td>${TYPES[c.type]?`<span class="pill">${TYPES[c.type]}</span>`:"—"}</td><td>${SOURCES[c.source]?`<span class="pill">${SOURCES[c.source]}</span>`:"—"}</td>
+     <td>${esc(c.poste||"—")}</td><td>${ACT[actv(c)]?`<span class="tag" style="--c:var(${ACT[actv(c)].c})"><span class="dot"></span>${ACT[actv(c)].l}</span>`:"Pipeline"}</td><td>${TYPES[c.type]?`<span class="pill">${TYPES[c.type]}</span>`:"—"}</td><td>${SOURCES[c.source]?`<span class="pill">${SOURCES[c.source]}</span>`:"—"}</td>
      <td>${cboard(c)==="pipe"?"Pipeline":"Prospection"}</td><td>${heatDots(chaleur(c))}</td><td>${lc?ago(lc.d):"—"}</td>
      <td>${esc(c.next&&c.next.label||(cboard(c)==="pipe"?"Voir l'opportunité":"—"))}</td><td class="${cLate(c)&&cboard(c)==="prospect"?"late":""}">${c.next&&c.next.date?rel(c.next.date):"—"}</td><td>${esc(c.pays||"")}</td></tr>`}).join("")
-     ||`<tr><td colspan="11" class="empty" style="padding:24px 14px">Aucun contact ne correspond à ces filtres.</td></tr>`}
+     ||`<tr><td colspan="13" class="empty" style="padding:24px 14px">Aucun contact ne correspond à ces filtres.</td></tr>`}
    </tbody></table></div>`;
 }
 
@@ -1217,7 +1258,8 @@ function drawerQuick(kind,d){
     <label class="field full"><span class="label">Entreprise liée</span><input id="q-studio" list="dl-comptes" autocomplete="off" value="${esc(d.studio||"")}"><datalist id="dl-comptes">${accs.map(a=>`<option value="${esc(a.nom)}"></option>`).join("")}</datalist><div class="hint" id="q-studio-hint">${studioHint(d.studio,"")}</div></label>
     <label class="field full"><span class="label">Poste</span><input id="q-poste" value=""></label>
     <label class="field"><span class="label">Type</span><select id="q-type">${opt(TYPES,d.type||"studio")}</select></label>
-    <label class="field"><span class="label">Source</span><select id="q-source">${opt(SOURCES,d.source||"outbound")}</select></label>`;
+    <label class="field"><span class="label">Source</span><select id="q-source">${opt(SOURCES,d.source||"outbound")}</select></label>
+    <label class="field full"><span class="label">Activation</span><select id="q-act">${opt(Object.fromEntries(Object.entries(ACT).map(([k,a])=>[k,a.l])),weekUsed()<LIM.week&&boardAccounts().size<LIM.accounts?"semaine":"backlog")}</select></label>`;
   if(kind==="compte")body=`<label class="field full"><span class="label">Nom de l'entreprise</span><input id="q-nom" autofocus></label>
     <label class="field"><span class="label">Type de compte</span><select id="q-atype">${opt(ACC_TYPES,"studio")}</select></label>
     <label class="field"><span class="label">Pays / marché</span><input id="q-pays"></label>`;
@@ -1252,7 +1294,8 @@ function drawerContact(c){
     <div class="sub">${ctag(c)}${heatDots(chaleur(c))}${TYPES[c.type]?`<span class="pill">${TYPES[c.type]}</span>`:""}${SOURCES[c.source]?`<span class="pill">${SOURCES[c.source]}</span>`:""}${c.exemple?'<span style="color:var(--faint)">exemple</span>':""}</div></div>
     <button class="round" data-close aria-label="Fermer">×</button></div>
   <div class="drawer-b">
-    <div class="facts"><div><span class="label">Board</span><b>${pros?"Prospection":"Pipeline"}</b></div>
+    ${pros?`<div><p class="label" style="margin:0 0 8px">Niveau d'activation</p><div class="seg-f" role="group" aria-label="Niveau d'activation">${Object.entries(ACT).map(([k,a])=>`<button data-setact="${k}" data-id="${c.id}" aria-pressed="${actv(c)===k}">${a.l}</button>`).join("")}</div></div>`:""}
+    <div class="facts"><div><span class="label">Board</span><b>${pros?(onBoard(c)?"Prospection":"Base · "+ACT[actv(c)].l):"Pipeline"}</b></div>
       <div><span class="label">Dernier contact</span><b>${lc?ago(lc.d):"—"}</b></div>
       <div><span class="label">Prochaine action</span><b class="${pros&&cLate(c)?"late":""}">${c.next&&c.next.date?rel(c.next.date):pros?"—":"Dans l'opportunité"}</b></div></div>
     <div class="next"><span class="label">Prochaine action</span>
@@ -1374,7 +1417,7 @@ function drawerProjet(p,isNew){
 /* ───────── Rendu ───────── */
 function render(){
   buildIndex();renderNav();
-  const V={today:vToday,prospect:vProspect,pipeline:vPipeline,comptes:vComptes,contacts:vContacts,projets:vProjets,forecast:vForecast,import:vImport}[S.view]||vToday;
+  const V={today:vToday,dues:vDues,prospect:vProspect,pipeline:vPipeline,comptes:vComptes,contacts:vContacts,projets:vProjets,forecast:vForecast,import:vImport}[S.view]||vToday;
   const keep=S.view==="import"&&document.getElementById("i-preview");
   if(!keep)document.getElementById("main").innerHTML=V();
   renderLayer();
@@ -1399,6 +1442,11 @@ document.addEventListener("click",async e=>{
   if(t.closest("[data-close]")){closeLayer();return}
   const svc=t.closest("[data-svc]");if(svc){svc.classList.toggle("primary");return}
   const pk=t.closest("[data-pick]");if(pk){const i=document.getElementById("c-studio")||document.getElementById("q-studio");i.value=pk.dataset.pick;i.dispatchEvent(new Event("input",{bubbles:true}));return}
+  const sa=t.closest("[data-setact]");if(sa){await setActivation([sa.dataset.id],sa.dataset.setact);return}
+  const bk=t.closest("[data-bulk]");if(bk){await setActivation([...S.sel],bk.dataset.bulk);return}
+  const af=t.closest("[data-actfilter]");if(af){S.filters.act=af.dataset.actfilter;go("contacts");return}
+  if(t.matches("input.sel")){t.checked?S.sel.add(t.value):S.sel.delete(t.value);render();return}
+  if(t.closest("[data-nosel]"))return;
   const fl=t.closest("[data-filter]");if(fl){const[k,v]=fl.dataset.filter.split(":");S.filters[k]=S.filters[k]===v?"":v;render();return}
   const wk=t.closest("[data-weeks]");if(wk){S.home.weeks=+wk.dataset.weeks;render();return}
   const pe=t.closest("[data-period]");if(pe){S.fc.period=pe.dataset.period;render();return}
@@ -1436,6 +1484,10 @@ document.addEventListener("click",async e=>{
     case"save-goals":{const o={...S.obj};GOALS.forEach(g=>{const v=+(document.getElementById("goal-"+g.k)||{}).value;o[g.k]=v>0?v:g.def});S.home.editGoals=false;await saveObj(o,"Objectifs enregistrés");break}
     case"edit-ca":S.fc.edit=true;render();break;
     case"save-ca":{const v=+(document.getElementById("fc-ca")||{}).value;S.fc.edit=false;await saveObj({...S.obj,ca:v>0?v:5000},"Objectif de revenu enregistré");break}
+    case"fill-open":S.fill=true;render();break;
+    case"fill-close":S.fill=false;render();break;
+    case"fill-go":{const ids=[...document.querySelectorAll(".fill-pick:checked")].map(x=>x.value);S.fill=false;if(ids.length)await setActivation(ids,"semaine");else render();break}
+    case"sel-clear":S.sel.clear();render();break;
     case"toggle-all":S.home.showAll=!S.home.showAll;render();break;
     case"migrate":a.disabled=true;await migrateLegacy();break;
     case"do-import":a.disabled=true;await doImport();break;
@@ -1443,6 +1495,31 @@ document.addEventListener("click",async e=>{
     case"clear-ex":if(a.dataset.sure){a.disabled=true;for(const k of["contacts","projets","comptes","opps"])for(const x of S[k].filter(y=>y.exemple))await del(k,x.id);toast("Exemples supprimés")}else{a.dataset.sure=1;a.textContent="Confirmer : supprimer les exemples"}break;
   }
 });
+async function setActivation(ids,level){
+  const list=ids.map(id=>S.contacts.find(c=>c.id===id)).filter(c=>c&&cboard(c)==="prospect").sort((a,b)=>suggestScore(b)-suggestScore(a));
+  const goesOn=["semaine","actif"].includes(level);let used=weekUsed();const accs=boardAccounts();let ok=0,blocked=0;
+  for(const c of list){
+    const patch={activation:level,maj:today()};
+    if(goesOn&&!onBoard(c)){
+      const k=compteKey(c)||c.id;
+      if(used>=LIM.week||(!accs.has(k)&&accs.size>=LIM.accounts)){blocked++;continue}
+      used++;accs.add(k);patch.activeLe=today();
+      if(!c.next||!c.next.date||(cstage(c)==="a_contacter"&&c.next.date<today()))patch.next={date:today(),label:(c.next&&c.next.label)||"Envoyer le premier message"};
+    }
+    if(await save("contacts",c.id,patch))ok++;
+  }
+  S.sel.clear();
+  if(blocked)toast(`${ok} → ${ACT[level].l} · ${blocked} restent en attente (limite : ${LIM.week} activations / semaine, ${LIM.accounts} comptes actifs)`);
+  else toast(`${ok} contact${ok>1?"s":""} → ${ACT[level].l}`);
+  render();
+}
+function fillSuggestions(){
+  const room=Math.max(0,Math.min(LIM.week-weekUsed(),LIM.accounts-boardAccounts().size));
+  const pool=S.contacts.filter(c=>cboard(c)==="prospect"&&["backlog","mois"].includes(actv(c))).sort((a,b)=>suggestScore(b)-suggestScore(a));
+  const picks=[],accs=boardAccounts();
+  for(const c of pool){if(picks.length>=room)break;const k=compteKey(c)||c.id;if(!accs.has(k)&&accs.size>=LIM.accounts)continue;accs.add(k);picks.push(c)}
+  return{room,picks};
+}
 async function saveObj(o,msg){S.obj=o;render();if(S.db){try{await S.db.doc("reglages/objectifs").set(o);toast(msg)}catch(_){toast("Non enregistré. Réessayez.")}}}
 async function runC(c,ev,quiet){
   const opts={};const nd=document.getElementById("c-nextdate");
@@ -1468,7 +1545,9 @@ async function quickSave(kind){
     const f={nom:val("q-nom").trim(),studio:val("q-studio").trim(),poste:val("q-poste").trim(),type:val("q-type"),source:val("q-source")};
     if(!f.nom&&!f.studio){toast("Indiquez au moins un nom.");return}
     f.compteId=f.studio?await ensureCompte(f.studio):"";
-    const id=uid();if(await save("contacts",id,{...f,stage:"a_contacter",relances:0,zone:"fr",next:{date:today(),label:"Envoyer le premier message"},hist:[{d:today(),t:"Fiche créée"}],cree:today(),maj:today()},true)){toast("Contact créé · complétez quand vous voulez");open("contact",id)}
+    const lvl=val("q-act")||"backlog",body={...f,activation:"backlog",stage:"a_contacter",relances:0,zone:"fr",next:{date:today(),label:"Envoyer le premier message"},hist:[{d:today(),t:"Fiche créée"}],cree:today(),maj:today()};
+    const id=uid();if(await save("contacts",id,body,true)){
+      if(!S.contacts.some(x=>x.id===id))S.contacts.push(migrate({id,...body}));if(lvl!=="backlog")await setActivation([id],lvl);else toast("Contact créé · en backlog");open("contact",id)}
   }
   if(kind==="compte"){
     const nom=val("q-nom").trim();if(!nom){toast("Donnez un nom à l'entreprise.");return}
@@ -1549,6 +1628,7 @@ document.addEventListener("input",e=>{
   if(id==="i-paste"){clearTimeout(window._pt);window._pt=setTimeout(()=>{if(e.target.value.trim())fromPaste(e.target.value)},400)}
 });
 document.addEventListener("change",e=>{
+  if(e.target.id==="sel-all"){const list=filteredC().filter(c=>!S.filters.act||actv(c)===S.filters.act);list.forEach(c=>e.target.checked?S.sel.add(c.id):S.sel.delete(c.id));render();return}
   if(e.target.id==="q-compte"){const a=accounts().find(x=>x.id===e.target.value);document.getElementById("q-contact").innerHTML=contactOptions(a,"")}
   if(e.target.id==="i-file"&&e.target.files[0])readFile(e.target.files[0]);
   if(["i-type","i-source"].includes(e.target.id)){const p=document.getElementById("i-paste");if(p&&p.value.trim())fromPaste(p.value)}
