@@ -482,16 +482,14 @@ const LIM={week:10,accounts:20};
 const C_STAGE=Object.fromEntries([...PROSPECT,{k:"pipeline",l:"En pipeline",c:"--c-conv"}].map(s=>[s.k,s]));
 /* Opportunités : board Pipeline */
 const PIPE=[
-  {k:"repondu",l:"Répondu",c:"--c-rep",d:"A répondu au message",p:10},
-  {k:"qualification",l:"Qualification",c:"--c-qualif",d:"Besoin, timing, type de projet, autonomie, décideurs, sérieux",p:20},
+  {k:"repondu",l:"Ont répondu",c:"--c-rep",d:"Contacts qui ont répondu, et leurs opportunités à qualifier",p:10},
   {k:"r1",l:"R1 · call",c:"--c-call",d:"Call planifié ou tenu",p:35},
-  {k:"proposition",l:"Proposition envoyée",c:"--c-call",d:"Devis ou proposition commerciale",p:50},
   {k:"attente",l:"Attente · négociation",c:"--c-attente",d:"Attente de décision ou discussion en cours",p:65},
   {k:"signe",l:"Signé",c:"--c-signe",d:"Devis accepté",p:100},
   {k:"perdu",l:"Perdu · plus tard",c:"--c-perdu",d:"Avec la raison documentée",p:0},
 ];
 const O_STAGE=Object.fromEntries(PIPE.map(s=>[s.k,s]));
-const OPEN=["repondu","qualification","r1","proposition","attente"];
+const OPEN=["repondu","r1","attente"];
 const RANK={repondu:1,qualification:2,r1:3,proposition:4,attente:5,signe:6,perdu:0};
 const DORMANT_C=["sommeil","reactiver"];
 const PSTAGES=[{k:"production",l:"En production",c:"--c-qualif"},{k:"livre",l:"Livré",c:"--c-call"},{k:"facture",l:"Facture envoyée",c:"--c-attente"},{k:"paye",l:"Payé",c:"--c-signe"}];
@@ -566,10 +564,10 @@ const actv=c=>cboard(c)==="pipe"?"pipeline":(c.activation&&ACT[c.activation]?c.a
 const onBoard=c=>cboard(c)==="prospect"&&["semaine","actif"].includes(actv(c));
 const boardAccounts=()=>new Set(S.contacts.filter(onBoard).map(c=>compteKey(c)||c.id));
 const weekUsed=()=>S.contacts.filter(c=>c.activeLe&&c.activeLe>=monday()).length;
-const awaitingOpp=c=>cstage(c)==="pipeline"&&!S.opps.some(o=>o.contactId===c.id&&OPEN.includes(ostage(o)));
+const awaitingOpp=c=>cstage(c)==="pipeline"&&!S.opps.some(o=>o.contactId===c.id);
 /* « suivi » = ce qui a une prochaine action pertinente (activé, réactivation en pause, ou a répondu sans opportunité) */
 const isTracked=c=>onBoard(c)||(actv(c)==="pause"&&DORMANT_C.includes(cstage(c)))||awaitingOpp(c);
-const isDue=c=>(cstage(c)==="pipeline"&&!S.opps.some(o=>o.contactId===c.id&&OPEN.includes(ostage(o)))&&c.next&&c.next.date&&c.next.date<=today())||cboard(c)==="prospect"&&c.next&&c.next.date&&c.next.date<=today()&&(onBoard(c)||(actv(c)==="pause"&&DORMANT_C.includes(cstage(c))));
+const isDue=c=>(awaitingOpp(c)&&c.next&&c.next.date&&c.next.date<=today())||cboard(c)==="prospect"&&c.next&&c.next.date&&c.next.date<=today()&&(onBoard(c)||(actv(c)==="pause"&&DORMANT_C.includes(cstage(c))));
 function suggestScore(c){let s=0;if(actv(c)==="mois")s+=5;if((c.relances||0)>0)s+=3;s+={chaud:4,tiede:2,froid:0,dormant:-1}[chaleur(c)]||0;
   if(["tiede","ancien_client"].includes(c.type))s+=2;if(["reco","intro","inbound"].includes(c.source))s+=2;if(c.email||c.linkedin)s+=1;if(c.next&&c.next.date&&c.next.date<=today())s+=1;return s}
 function suggestReason(c){const r=[];if(actv(c)==="mois")r.push("prévu ce mois-ci");if((c.relances||0)>0)r.push("déjà contacté");if(["reco","intro","inbound"].includes(c.source))r.push(SOURCES[c.source].toLowerCase());
@@ -616,7 +614,7 @@ function applyC(c,ev,opts={}){
 const C_DROP={a_contacter:"a_contacter",contacte:"envoye",relance:"envoye",sommeil:"sommeil",reactiver:"reactiver",converti:"repondu"};
 
 /* ───────── Opportunités ───────── */
-const ostage=o=>O_STAGE[o.stage]?o.stage:"repondu";
+const ostage=o=>O_STAGE[o.stage]?o.stage:({qualification:"repondu",proposition:"attente"}[o.stage]||"repondu");
 const ocolor=o=>ostage(o)==="attente"&&o.nego?"--c-nego":O_STAGE[ostage(o)].c;
 const olabel=o=>ostage(o)==="attente"?(o.nego?"Négociation":"Attente décision"):O_STAGE[ostage(o)].l;
 const proba=o=>(o.proba!==undefined&&o.proba!==null&&o.proba!=="")?+o.proba:(ostage(o)==="attente"&&o.nego?75:O_STAGE[ostage(o)].p);
@@ -629,9 +627,9 @@ function applyO(o,ev){
   const to=k=>{p.stage=k;p.reach=Math.max(reach(o),RANK[k]||0);if(O_NEXT[k])p.next={date:addDays(t,O_NEXT[k][0]),label:O_NEXT[k][1]}};
   switch(ev){
     case"repondu":to("repondu");break;
-    case"qualification":to("qualification");log("Qualification");break;
+    case"qualification":to("repondu");log("Qualification");break;
     case"r1":to("r1");log("Call R1");break;
-    case"proposition":to("proposition");log("Proposition envoyée"+(o.valeur?" · "+eur(o.valeur):""));break;
+    case"proposition":to("attente");p.nego=false;p.next={date:addDays(t,7),label:"Relancer la proposition"};log("Proposition envoyée"+(o.valeur?" · "+eur(o.valeur):""));break;
     case"attente":to("attente");p.nego=false;log("En attente de décision");break;
     case"nego":to("attente");p.nego=true;p.next={date:addDays(t,4),label:"Avancer la négociation"};log("Négociation en cours");break;
     case"signe":to("signe");p.next=null;p.signeLe=t;log("Signé"+(o.valeur?" · "+eur(o.valeur):""));break;
@@ -813,8 +811,7 @@ function quest(it){
     if(DORMANT_C.includes(s))return{ev:"envoye",t:"Réactiver "+who,cat:"réactivation",xp:2};
     return{ev:"envoye",t:"Relancer "+who,cat:"relance",xp:1};}
   const s=ostage(x),who=x.nom;
-  if(s==="repondu")return{ev:"qualification",t:"Qualifier · "+who,cat:"qualification",xp:3};
-  if(s==="qualification")return{ev:"r1",t:"Caler le call · "+who,cat:"call",xp:5};
+  if(s==="repondu")return{ev:"r1",t:"Qualifier et caler le call · "+who,cat:"call",xp:5};
   if(s==="r1")return{ev:"proposition",t:"Envoyer la proposition · "+who,cat:"proposition",xp:8};
   if(s==="proposition")return{ev:"suivi",t:"Suivre la proposition · "+who,cat:"suivi de proposition",xp:2};
   return{ev:"suivi",t:(x.nego?"Faire avancer la négo · ":"Débloquer la décision · ")+who,cat:"suivi de proposition",xp:2};
@@ -955,16 +952,14 @@ function vDues(){
 function filteredO(){const q=S.filters.q.trim().toLowerCase();return S.opps.filter(o=>!q||[o.nom,oCompteName(o),(oContact(o)||{}).nom,MISSIONS[o.mission]].join(" ").toLowerCase().includes(q))}
 function vPipeline(){
   const list=filteredO();
-  const cols=PIPE.map(s=>{const os=list.filter(o=>ostage(o)===s.k).sort((a,b)=>pondere(b)-pondere(a));
-    const sum=os.reduce((t,o)=>t+(+o.valeur||0),0),pd=os.reduce((t,o)=>t+pondere(o),0);
-    return`<div class="col folder" data-drop="${s.k}">${colHead(s,os.length,sum&&s.k!=="perdu"?` · ${keur(sum)}${OPEN.includes(s.k)?" · pondéré "+keur(pd):""}`:"")}${os.map(pcardO).join("")}</div>`}).join("");
   const q=S.filters.q.trim().toLowerCase();
   const waiting=S.contacts.filter(awaitingOpp).filter(c=>!q||[c.nom,c.studio,compteName(c)].join(" ").toLowerCase().includes(q)).sort((a,b)=>((a.next&&a.next.date)||"9").localeCompare((b.next&&b.next.date)||"9"));
-  const qualif=`<div class="col archive folder">${colHead({l:"À qualifier",c:"--c-conv",d:"Ont répondu, sans opportunité. Créez-la depuis la fiche si un besoin se confirme."},waiting.length)}
-    ${waiting.map(c=>`<div class="arch" data-open="${c.id}"><i class="dot" style="--c:var(${cLate(c)?"--late":"--c-conv"})"></i><b>${esc(cname(c))}</b><small class="${cLate(c)?"late":""}">${c.next&&c.next.date?rel(c.next.date):"—"}</small></div>`).join("")}</div>`;
+  const cols=PIPE.map(s=>{const os=list.filter(o=>ostage(o)===s.k).sort((a,b)=>pondere(b)-pondere(a));
+    const sum=os.reduce((t,o)=>t+(+o.valeur||0),0),pd=os.reduce((t,o)=>t+pondere(o),0),extra=s.k==="repondu"?waiting:[];
+    return`<div class="col folder" data-drop="${s.k}">${colHead(s,os.length+extra.length,sum&&s.k!=="perdu"?` · ${keur(sum)}${OPEN.includes(s.k)?" · pondéré "+keur(pd):""}`:"")}${extra.map(pcardC).join("")}${os.map(pcardO).join("")}</div>`}).join("");
   return head("Pipeline","Une carte = une opportunité (un besoin, une mission). Une même entreprise peut en avoir plusieurs.",`<button class="btn primary" data-act="new-opp">+ Opportunité</button>`)
    +legacyNotice()+`<div class="toolbar"><input type="search" id="f-q" placeholder="Rechercher une opportunité, un account…" value="${esc(S.filters.q)}"></div>`
-   +`<div class="board-wrap"><div class="board">${qualif}${cols}</div></div>`;
+   +`<div class="board-wrap"><div class="board">${cols}</div></div>`;
 }
 function pcardO(o){
   const c=oContact(o),p=proba(o),on=Math.round(p/20);
@@ -1402,7 +1397,7 @@ function drawerOpp(o){
     <div class="next"><span class="label">Prochaine étape</span>
       <div class="row"><input id="o-nextlabel" value="${esc(o.next&&o.next.label||"")}" placeholder="Ex. envoyer 2 options de prix"><input type="date" id="o-nextdate" value="${o.next&&o.next.date||""}" aria-label="Date"></div>
       ${g?`<a class="btn sm" href="${g}" target="_blank" rel="noopener" style="align-self:flex-start">Ajouter à Google Agenda</a>`:""}</div>
-    <div><p class="label" style="margin:0 0 8px">Étape du pipe</p><div class="steps">${evBtn("qualification","Qualification","--c-qualif")}${evBtn("r1","Call R1","--c-call")}${evBtn("proposition","Proposition envoyée","--c-call")}${evBtn("attente","Attente décision","--c-attente")}${evBtn("nego","Négociation","--c-nego")}${evBtn("signe","Signé","--c-signe")}${evBtn("perdu","Perdu · plus tard","--c-perdu")}</div></div>
+    <div><p class="label" style="margin:0 0 8px">Étape du pipe</p><div class="steps">${evBtn("r1","Call R1","--c-call")}${evBtn("proposition","Proposition envoyée","--c-call")}${evBtn("attente","Attente décision","--c-attente")}${evBtn("nego","Négociation","--c-nego")}${evBtn("signe","Signé","--c-signe")}${evBtn("perdu","Perdu · plus tard","--c-perdu")}</div></div>
     <div class="form">
       <label class="field"><span class="label">Contact principal</span><select id="o-contact">${contactOptions(acc,o.contactId)}</select></label>
       <label class="field"><span class="label">Type de mission</span><select id="o-mission">${opt(MISSIONS,o.mission,"—")}</select></label>
