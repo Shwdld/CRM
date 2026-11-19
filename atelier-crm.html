@@ -440,6 +440,14 @@ body{background:radial-gradient(60vw 50vh at 100% 0%,color-mix(in srgb,var(--bei
 .title-edit:focus{outline:none;background:var(--raised);box-shadow:0 0 0 1.5px var(--brand)}
 .title-edit::placeholder{color:var(--late);opacity:.75;font-style:italic}
 .drawer-b>.actions:last-child{position:sticky;bottom:-28px;margin:0 -24px -28px;padding:14px 24px calc(14px + env(safe-area-inset-bottom,0px));background:color-mix(in srgb,var(--block) 90%,transparent);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);border-top:1px solid var(--line-soft);z-index:3}
+
+/* écran de verrouillage */
+body.locked .app,body.locked #layer{visibility:hidden}
+.lock{position:fixed;inset:0;z-index:100;display:grid;place-items:center;background:var(--bg);padding:24px}
+.lock-card{width:min(360px,100%);display:flex;flex-direction:column;gap:12px;background:var(--glass,var(--block));-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);border:1px solid var(--line);border-radius:30px;padding:28px}
+.lock-card b{font-size:40px;line-height:1}
+.lock-card p{margin:0;color:var(--muted)}
+.lock-card input{background:var(--raised);border:1px solid var(--line);border-radius:999px;padding:10px 14px;font-size:14px}
 </style>
 
 <div class="app">
@@ -680,7 +688,7 @@ const siblings=c=>{const k=compteKey(c);return k?S.contacts.filter(x=>x.id!==c.i
 
 /* ───────── État & stockage ───────── */
 const S={contacts:[],projets:[],comptes:[],opps:[],obj:{},view:"today",filters:{q:"",type:"",source:"",board:"",chaleur:"",act:""},sort:{k:"next",dir:1},
-  home:{weeks:2,editGoals:false,showAll:false},sel:new Set(),fill:false,fc:{period:"mois",edit:false},ready:false,db:null,L:null};
+  params:{},backups:[],sec:{},bk:{busy:"",confirm:""},home:{weeks:2,editGoals:false,showAll:false},sel:new Set(),fill:false,fc:{period:"mois",edit:false},ready:false,db:null,L:null};
 const esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
 const norm=s=>(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/\(exemple\)/g,"").replace(/[^a-z0-9]+/g," ").trim();
 const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
@@ -699,23 +707,27 @@ const goalTarget=g=>+(S.obj[g.k]||g.def);
 const caTarget=()=>+(S.obj.ca||5000);
 
 async function boot(){
-  render();
+  document.body.classList.add("locked");render();
   const db=await claude.use("db").catch(()=>null);
-  if(!db){setSync(false,"Hors ligne");S.ready=true;render();return}
+  if(!db){setSync(false,"Hors ligne");S.ready=true;S.secLoaded=true;applyLock();render();return}
+  setTimeout(()=>{if(!S.secLoaded){S.secLoaded=true;applyLock()}},8000);
   S.db=db;
   let got=0;const timer=setTimeout(()=>{if(got<15)setSync(false,"Lent…")},10000);
   const bit={contacts:1,projets:2,comptes:4,opps:8};
   const sub=name=>db.collection(name).onSnapshot(snap=>{
     S[name]=snap.docs.map(d=>{const o={id:d.id,...d.data()};return name==="contacts"?migrate(o):o});
-    if(!snap.metadata.fromCache){got|=bit[name];if(got===15){clearTimeout(timer);setSync(true,"Synchro")}}
+    if(!snap.metadata.fromCache){got|=bit[name];if(got===15){clearTimeout(timer);setSync(true,"Synchro");S.allLoaded=true;setTimeout(autoBackupTick,1500)}}
     S.ready=true;render();
   },()=>{clearTimeout(timer);setSync(false,"Hors ligne");S.ready=true;render()});
   sub("contacts");sub("projets");sub("comptes");sub("opps");
   db.doc("reglages/objectifs").onSnapshot(s=>{S.obj=s.exists?s.data():{};render()},()=>{});
+  db.doc("reglages/params").onSnapshot(s=>{S.params=s.exists?s.data():{};render()},()=>{});
+  db.doc("reglages/securite").onSnapshot(s=>{S.sec=s.exists?s.data():{};if(!s.metadata.fromCache||S.sec.hash)S.secLoaded=true;applyLock();if(S.view==="params")render()},()=>{S.secLoaded=true;applyLock()});
+  db.collection("sauvegardes").onSnapshot(snap=>{S.backups=snap.docs.map(d=>({id:d.id,...d.data()})).filter(b=>b.at);if(!snap.metadata.fromCache){S.bkLoaded=true;setTimeout(autoBackupTick,1500)}if(S.view==="params")render()},()=>{});
 }
 
 /* ───────── Navigation & thème ───────── */
-const VIEWS=[["today","Dashboard"],["dues","Relances dues"],["prospect","Prospection"],["pipeline","Pipeline"],["comptes","Accounts"],["contacts","Base de contacts"],["projets","Projets"],["forecast","Revenue forecast"],["import","Importer"]];
+const VIEWS=[["today","Dashboard"],["dues","Relances dues"],["prospect","Prospection"],["pipeline","Pipeline"],["comptes","Accounts"],["contacts","Base de contacts"],["projets","Projets"],["forecast","Revenue forecast"],["import","Importer"],["params","Paramètres"]];
 function dueCount(){return S.contacts.filter(isDue).length+S.opps.filter(o=>OPEN.includes(ostage(o))&&o.next&&o.next.date&&o.next.date<=today()).length}
 function renderNav(){
   const due=dueCount();
@@ -1432,10 +1444,117 @@ function drawerProjet(p,isNew){
   </div></aside>`;
 }
 
+/* ───────── PARAMÈTRES : sauvegardes quotidiennes + code de verrouillage ───────── */
+const BK={max:10,chunk:90000,cols:["contacts","comptes","opps","projets"]};
+const TAB_ID=uid();
+const bkParams=()=>({hour:S.params.backupHour??20,auto:S.params.backupAuto!==false});
+const fmtDT=iso=>{const d=new Date(iso);return d.toLocaleDateString("fr-FR",{weekday:"short",day:"numeric",month:"short"})+" · "+pad(d.getHours())+"h"+pad(d.getMinutes())};
+function nextBackupDate(){
+  const {hour}=bkParams();const autos=S.backups.filter(b=>b.kind==="auto").map(b=>b.at).sort();const last=autos[autos.length-1];
+  const nd=last?new Date(last):new Date(Date.now()-864e5);nd.setHours(hour,0,0,0);if(last&&nd<=new Date(last))nd.setDate(nd.getDate()+1);
+  if(!last){const t=new Date();t.setHours(hour,0,0,0);return t}
+  return nd;
+}
+async function pruneBackups(protect=[]){
+  const snap=await S.db.collection("sauvegardes").orderBy("at","desc").get();
+  const extra=snap.docs.filter(d=>!protect.includes(d.id)).slice(Math.max(0,BK.max-protect.length));
+  for(const d of extra){const m=d.data()||{};for(let i=0;i<(m.parts||1);i++)await S.db.collection("sauvegardes").doc(d.id).collection("parts").doc("p"+i).delete().catch(()=>{});await S.db.collection("sauvegardes").doc(d.id).delete().catch(()=>{})}
+}
+async function makeBackup(kind,protect=[]){
+  if(!S.db||S.bk.busy)return"";S.bk.busy="Sauvegarde en cours…";render();
+  try{
+    const data={};for(const k of BK.cols)data[k]=S[k].map(x=>{const{legacy,...r}=x;return r});
+    data.reglages={objectifs:S.obj||{},params:S.params||{}};
+    const now=new Date().toISOString(),txt=JSON.stringify({v:1,at:now,data}),id="b"+Date.now(),parts=Math.max(1,Math.ceil(txt.length/BK.chunk));
+    const ref=S.db.collection("sauvegardes").doc(id);
+    for(let i=0;i<parts;i++)await ref.collection("parts").doc("p"+i).set({i,s:txt.slice(i*BK.chunk,(i+1)*BK.chunk)});
+    await ref.set({at:now,kind,parts,size:txt.length,counts:Object.fromEntries(BK.cols.map(k=>[k,data[k].length]))});
+    await pruneBackups([id,...protect]);
+    S.bk.busy="";if(kind!=="avant restauration")toast(kind==="auto"?"Sauvegarde automatique effectuée":"Sauvegarde créée");render();return id;
+  }catch(e){S.bk.busy="";toast("La sauvegarde a échoué. Réessayez dans un instant.");render();return""}
+}
+async function readBackup(id){
+  const ref=S.db.collection("sauvegardes").doc(id);const m=(await ref.get()).data();if(!m)throw new Error("absente");
+  let txt="";for(let i=0;i<m.parts;i++){const d=await ref.collection("parts").doc("p"+i).get();txt+=(d.data()||{}).s||""}
+  return{meta:m,txt,json:JSON.parse(txt)};
+}
+async function restoreBackup(id){
+  if(!S.db||S.bk.busy)return;
+  const safety=await makeBackup("avant restauration",[id]);if(!safety){toast("Restauration annulée : la sauvegarde de sécurité a échoué.");return}
+  S.bk.busy="Lecture de la sauvegarde…";render();
+  try{
+    const {json}=await readBackup(id);const total=BK.cols.reduce((t,k)=>t+(json.data[k]||[]).length+S[k].length,0);let n=0;
+    for(const k of BK.cols){
+      const keep=new Set((json.data[k]||[]).map(x=>x.id));
+      for(const x of S[k].slice())if(!keep.has(x.id)){await S.db.collection(k).doc(x.id).delete();n++;S.bk.busy=`Restauration… ${Math.round(n/total*100)} %`;render()}
+      for(const x of json.data[k]||[]){const{id:did,...body}=x;await S.db.collection(k).doc(did).set(body);n++;if(n%10===0){S.bk.busy=`Restauration… ${Math.round(n/total*100)} %`;render()}}
+    }
+    if(json.data.reglages){if(json.data.reglages.objectifs)await S.db.doc("reglages/objectifs").set(json.data.reglages.objectifs)}
+    S.bk.busy="";S.bk.confirm="";toast("CRM restauré. Une sauvegarde « avant restauration » a été gardée.");render();
+  }catch(e){S.bk.busy="";toast("La restauration a échoué. Vos données actuelles sont dans la sauvegarde « avant restauration ».");render()}
+}
+async function downloadBackup(id){
+  try{const {meta,txt}=await readBackup(id);const dl=await claude.use("downloads");
+    if(!dl){toast("Le téléchargement n'est pas disponible ici.");return}
+    await dl.save({filename:"crm-atelier-sauvegarde-"+meta.at.slice(0,10)+".json",data:txt});
+  }catch(e){if(!e||e.code!=="declined")toast("Téléchargement impossible pour le moment.")}
+}
+async function autoBackupTick(){
+  if(!S.allLoaded||!S.bkLoaded||!S.db||S.bk.busy||!bkParams().auto)return;
+  if(new Date()<nextBackupDate())return;
+  try{const r=await S.db.doc("reglages/verrou-sauvegarde").acquire({holder:TAB_ID,ttlMs:120000});if(!r.acquired)return}catch(_){return}
+  await makeBackup("auto");
+}
+setInterval(autoBackupTick,5*60*1000);
+async function sha(t){const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode("atelier-crm:"+t));return[...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("")}
+const ss={get(k){try{return sessionStorage.getItem(k)}catch(e){return null}},set(k,v){try{sessionStorage.setItem(k,v)}catch(e){}},del(k){try{sessionStorage.removeItem(k)}catch(e){}}};
+function applyLock(){
+  const h=S.sec.hash,locked=!!h&&ss.get("crm-unlocked")!==h;
+  document.body.classList.toggle("locked",locked||!S.secLoaded);
+  let el=document.getElementById("lock");
+  if(locked&&!el){el=document.createElement("div");el.id="lock";el.className="lock";
+    el.innerHTML=`<form class="lock-card" id="lock-form"><b class="serif">Atelier</b><p>Ce CRM est verrouillé.</p><input type="password" id="lock-code" placeholder="Code d'accès" autocomplete="current-password" aria-label="Code d'accès" autofocus><button class="btn primary" type="submit">Déverrouiller</button><small id="lock-err" class="late"></small></form>`;
+    document.body.appendChild(el);setTimeout(()=>{const i=document.getElementById("lock-code");if(i)i.focus()},50)}
+  if(!locked&&el)el.remove();
+}
+document.addEventListener("submit",async e=>{
+  if(e.target.id!=="lock-form")return;e.preventDefault();
+  const v=document.getElementById("lock-code").value;if((await sha(v))===S.sec.hash){ss.set("crm-unlocked",S.sec.hash);applyLock()}
+  else{document.getElementById("lock-err").textContent="Code incorrect.";document.getElementById("lock-code").value=""}
+});
+function vParams(){
+  const {hour,auto}=bkParams(),list=S.backups.slice().sort((a,b)=>b.at.localeCompare(a.at)),nb=nextBackupDate();
+  const KIND={auto:"Automatique",manuel:"Manuelle","avant restauration":"Avant restauration"};
+  const row=b=>{const c=b.counts||{};return`<div class="sib" style="cursor:default;flex-wrap:wrap"><div class="grow"><b>${fmtDT(b.at)}</b> <span class="pill">${KIND[b.kind]||b.kind}</span>
+    <div class="muted" style="font-size:12px;margin-top:3px">${c.contacts||0} contacts · ${c.comptes||0} accounts · ${c.opps||0} opportunités · ${c.projets||0} projets · ${Math.round((b.size||0)/1024)} Ko</div></div>
+    ${S.bk.confirm===b.id?`<span class="late" style="font-size:12.5px">Remplacer tout le CRM par cette sauvegarde ?</span><button class="btn sm primary" data-bk-restore="${b.id}" ${S.bk.busy?"disabled":""}>Oui, restaurer</button><button class="btn sm ghost" data-bk-cancel>Annuler</button>`
+    :`<button class="btn sm" data-bk-dl="${b.id}">Télécharger</button><button class="btn sm" data-bk-ask="${b.id}" ${S.bk.busy?"disabled":""}>Restaurer</button>`}</div>`};
+  return head("Paramètres","Sauvegardes et accès à votre CRM.")
+   +`<div style="display:flex;flex-direction:column;gap:46px;margin-top:32px">
+    <section class="block folder" style="--tab-w:30%"><div class="b-h"><div><h2>Sauvegardes</h2><p>Une sauvegarde par jour, les ${BK.max} dernières sont gardées. La plus ancienne est remplacée automatiquement.</p></div>
+      <div class="actions"><button class="btn primary" data-act="bk-now" ${S.bk.busy||!S.db?"disabled":""}>Sauvegarder maintenant</button></div></div>
+      <div class="form">
+        <label class="field"><span class="label">Sauvegarde automatique</span><select id="bk-auto"><option value="1" ${auto?"selected":""}>Activée, chaque jour</option><option value="0" ${auto?"":"selected"}>Désactivée</option></select></label>
+        <label class="field"><span class="label">Heure de sauvegarde</span><select id="bk-hour">${Array.from({length:24},(_,h)=>`<option value="${h}" ${h===hour?"selected":""}>${pad(h)}h00</option>`).join("")}</select></label>
+      </div>
+      <div class="alert soft" style="background:var(--raised)">${S.bk.busy?`<b>${esc(S.bk.busy)}</b>`:auto?`Prochaine sauvegarde automatique : <b>&nbsp;${fmtDT(nb.toISOString())}</b>`:"Sauvegarde automatique désactivée."}</div>
+      <p class="muted" style="font-size:12.5px;margin:0">La sauvegarde automatique se lance quand le CRM est ouvert, sur n'importe quel appareil : à l'heure choisie s'il est ouvert à ce moment-là, sinon dès sa prochaine ouverture. Pour une copie hors du CRM, utilisez « Télécharger ».</p>
+      <div><p class="label" style="margin:0 0 8px">${list.length} / ${BK.max} sauvegardes</p><div class="sibs">${list.map(row).join("")||`<div class="muted">Aucune sauvegarde pour l'instant. Cliquez sur « Sauvegarder maintenant » pour créer la première.</div>`}</div></div>
+    </section>
+    <section class="block folder" style="--tab-w:30%"><div class="b-h"><div><h2>Code d'accès</h2><p>${S.sec.hash?"Un code est demandé à chaque nouvelle ouverture du CRM.":"Aucun code pour l'instant."}</p></div>${S.sec.hash?`<div class="actions"><button class="btn" data-act="lock-now">Verrouiller maintenant</button></div>`:""}</div>
+      <div class="form">
+        <label class="field"><span class="label">${S.sec.hash?"Nouveau code":"Choisir un code"}</span><input type="password" id="sec-1" autocomplete="new-password" placeholder="6 caractères minimum"></label>
+        <label class="field"><span class="label">Confirmer le code</span><input type="password" id="sec-2" autocomplete="new-password"></label>
+      </div>
+      <div class="actions"><button class="btn primary" data-act="sec-save">${S.sec.hash?"Changer le code":"Activer le code"}</button>${S.sec.hash?`<button class="btn ghost" data-act="sec-off" style="color:var(--late)">${S.bk.secOff?"Confirmer : retirer le code":"Retirer le code"}</button>`:""}</div>
+      <p class="muted" style="font-size:12.5px;margin:0">Votre CRM est déjà privé : seul votre compte Claude peut l'ouvrir. Ce code ajoute un écran de verrouillage, utile si quelqu'un d'autre utilise votre ordinateur. Il ne chiffre pas les données. En cas d'oubli, demandez-moi de le retirer.</p>
+    </section></div>`;
+}
+
 /* ───────── Rendu ───────── */
 function render(){
   buildIndex();renderNav();
-  const V={today:vToday,dues:vDues,prospect:vProspect,pipeline:vPipeline,comptes:vComptes,contacts:vContacts,projets:vProjets,forecast:vForecast,import:vImport}[S.view]||vToday;
+  const V={params:vParams,today:vToday,dues:vDues,prospect:vProspect,pipeline:vPipeline,comptes:vComptes,contacts:vContacts,projets:vProjets,forecast:vForecast,import:vImport}[S.view]||vToday;
   const keep=S.view==="import"&&document.getElementById("i-preview");
   if(!keep)document.getElementById("main").innerHTML=V();
   renderLayer();
@@ -1462,6 +1581,10 @@ document.addEventListener("click",async e=>{
   if(t.closest("[data-close]")){closeLayer();return}
   const svc=t.closest("[data-svc]");if(svc){svc.classList.toggle("primary");return}
   const pk=t.closest("[data-pick]");if(pk){const i=document.getElementById("c-studio")||document.getElementById("q-studio");i.value=pk.dataset.pick;i.dispatchEvent(new Event("input",{bubbles:true}));return}
+  const bka=t.closest("[data-bk-ask]");if(bka){S.bk.confirm=bka.dataset.bkAsk;render();return}
+  if(t.closest("[data-bk-cancel]")){S.bk.confirm="";render();return}
+  const bkr=t.closest("[data-bk-restore]");if(bkr){await restoreBackup(bkr.dataset.bkRestore);return}
+  const bkd=t.closest("[data-bk-dl]");if(bkd){await downloadBackup(bkd.dataset.bkDl);return}
   const sa=t.closest("[data-setact]");if(sa){await setActivation([sa.dataset.id],sa.dataset.setact);return}
   const bk=t.closest("[data-bulk]");if(bk){await setActivation([...S.sel],bk.dataset.bulk);return}
   const af=t.closest("[data-actfilter]");if(af){S.filters.act=af.dataset.actfilter;go("contacts");return}
@@ -1510,6 +1633,11 @@ document.addEventListener("click",async e=>{
     case"fill-close":S.fill=false;render();break;
     case"fill-go":{const ids=[...document.querySelectorAll(".fill-pick:checked")].map(x=>x.value);S.fill=false;if(ids.length)await setActivation(ids,"semaine");else render();break}
     case"sel-clear":S.sel.clear();render();break;
+    case"bk-now":await makeBackup("manuel");break;
+    case"lock-now":ss.del("crm-unlocked");applyLock();break;
+    case"sec-save":{const a1=val("sec-1"),a2=val("sec-2");if(a1.length<6){toast("Le code doit faire au moins 6 caractères.");break}if(a1!==a2){toast("Les deux codes ne correspondent pas.");break}
+      const h=await sha(a1);try{await S.db.doc("reglages/securite").set({hash:h,maj:today()});ss.set("crm-unlocked",h);toast("Code d'accès activé");}catch(_){toast("Code non enregistré. Réessayez.")}break}
+    case"sec-off":if(S.bk.secOff){try{await S.db.doc("reglages/securite").set({hash:"",maj:today()});ss.del("crm-unlocked");S.bk.secOff=false;toast("Code retiré")}catch(_){toast("Échec. Réessayez.")}}else{S.bk.secOff=true;render()}break;
     case"toggle-all":S.home.showAll=!S.home.showAll;render();break;
     case"migrate":a.disabled=true;await migrateLegacy();break;
     case"do-import":a.disabled=true;await doImport();break;
@@ -1653,6 +1781,7 @@ document.addEventListener("input",e=>{
   if(id==="i-paste"){clearTimeout(window._pt);window._pt=setTimeout(()=>{if(e.target.value.trim())fromPaste(e.target.value)},400)}
 });
 document.addEventListener("change",e=>{
+  if(e.target.id==="bk-hour"||e.target.id==="bk-auto"){const o={...S.params,backupHour:+val("bk-hour"),backupAuto:val("bk-auto")==="1"};S.params=o;render();if(S.db)S.db.doc("reglages/params").set(o).then(()=>{toast("Réglage enregistré");setTimeout(autoBackupTick,500)}).catch(()=>toast("Réglage non enregistré"));return}
   if(e.target.id&&e.target.closest&&e.target.closest("#layer .drawer")){S.dirty=S.dirty||{};S.dirty[e.target.id]=e.target.type==="checkbox"?e.target.checked:e.target.value}
   if(e.target.id==="sel-all"){const list=filteredC().filter(c=>!S.filters.act||actv(c)===S.filters.act);list.forEach(c=>e.target.checked?S.sel.add(c.id):S.sel.delete(c.id));render();return}
   if(e.target.id==="q-compte"){const a=accounts().find(x=>x.id===e.target.value);document.getElementById("q-contact").innerHTML=contactOptions(a,"")}
