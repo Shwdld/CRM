@@ -733,9 +733,10 @@ function renderNav(){
   const due=dueCount();
   document.getElementById("nav").innerHTML=VIEWS.map(([k,l])=>`<button data-v="${k}" ${S.view===k?'aria-current="page"':""}>${l}<span class="count">${k==="dues"&&due?due:""}</span></button>`).join("");
 }
-function go(v){S.view=v;location.hash=v;render();window.scrollTo(0,0)}
+function clearFilters(){S.filters={q:"",type:"",source:"",board:"",chaleur:"",act:S.filters.act&&S._keepAct?S.filters.act:""};S._keepAct=false}
+function go(v){if(v!==S.view)clearFilters();S.view=v;location.hash=v;render();window.scrollTo(0,0)}
 document.getElementById("nav").addEventListener("click",e=>{const b=e.target.closest("button[data-v]");if(b)go(b.dataset.v)});
-window.addEventListener("hashchange",()=>{const h=location.hash.slice(1);if(VIEWS.some(v=>v[0]===h)&&h!==S.view){S.view=h;render()}});
+window.addEventListener("hashchange",()=>{const h=location.hash.slice(1);if(VIEWS.some(v=>v[0]===h)&&h!==S.view){clearFilters();S.view=h;render()}});
 {const h=location.hash.slice(1);if(VIEWS.some(v=>v[0]===h))S.view=h;}
 function currentTheme(){const s=store.get("crm-theme");if(s==="light"||s==="dark")return s;return window.matchMedia&&matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"}
 function applyTheme(t,explicit){if(explicit)document.documentElement.setAttribute("data-theme",t);document.querySelectorAll("#theme button").forEach(b=>b.setAttribute("aria-pressed",b.dataset.t===t))}
@@ -897,6 +898,10 @@ function filteredC(){
   return S.contacts.filter(c=>(!f.type||c.type===f.type)&&(!f.source||c.source===f.source)&&(!f.board||cboard(c)===f.board)&&(!f.chaleur||chaleur(c)===f.chaleur)
     &&(!q||[c.nom,c.studio,compteName(c),c.poste,c.email,c.pays,c.note,c.notes].join(" ").toLowerCase().includes(q)));
 }
+function activeFilterNote(){
+  const f=S.filters,parts=[];if(f.q)parts.push("recherche « "+esc(f.q)+" »");if(f.type)parts.push(TYPES[f.type]);if(f.source)parts.push(SOURCES[f.source]);if(f.chaleur)parts.push(CHALEURS[f.chaleur]);if(f.board)parts.push(f.board==="pipe"?"Pipeline":"Prospection");if(f.act&&ACT[f.act])parts.push(ACT[f.act].l);
+  return parts.length?`<div class="notice" style="background:color-mix(in srgb,var(--c-qualif) 22%,var(--raised))"><span>Filtre actif : <b style="color:var(--fg)">${parts.join(" · ")}</b>. Certains éléments sont masqués.</span><button class="btn sm" data-act="clear-filters">Tout afficher</button></div>`:"";
+}
 function tagFilters(withBoard){
   const f=S.filters;
   const chip=(k,v,l)=>`<button class="pill" data-filter="${k}:${v}" aria-pressed="${f[k]===v}">${esc(l)}</button>`;
@@ -928,7 +933,7 @@ function vProspect(){
   const archive=`<div class="col archive folder" data-drop="converti">${colHead({l:"A répondu",c:"--c-conv",d:"Sort de la prospection. Créez une opportunité depuis la fiche si un besoin se confirme."},conv.length)}
     ${conv.slice(0,40).map(c=>{const o=oppsOf(c)[0];return`<div class="arch" data-open="${c.id}"><i class="dot" style="--c:var(${o?ocolor(o):"--c-conv"})"></i><b>${esc(cname(c))}</b><small>${o?esc(olabel(o)):"Sans opportunité"}</small></div>`}).join("")}</div>`;
   return head("Prospection <em>&amp; relances</em>","Glissez une carte : la prochaine relance se calcule toute seule. Quand un contact répond, il sort du board ; vous créez l'opportunité vous-même si un besoin se confirme.",`<button class="btn primary" data-act="new-contact">+ Contact</button>`)
-   +legacyNotice()+activationPanel()+tagFilters(false)+`<div class="board-wrap"><div class="board">${cols}${archive}</div></div>`;
+   +legacyNotice()+activationPanel()+activeFilterNote()+tagFilters(false)+`<div class="board-wrap"><div class="board">${cols}${archive}</div></div>`;
 }
 function pcardC(c){
   const h=chaleur(c),on={froid:1,tiede:3,chaud:5,dormant:0}[h];const sib=siblings(c).length,k=compteKey(c);
@@ -970,7 +975,7 @@ function vPipeline(){
     const sum=os.reduce((t,o)=>t+(+o.valeur||0),0),pd=os.reduce((t,o)=>t+pondere(o),0),extra=s.k==="repondu"?waiting:[];
     return`<div class="col folder" data-drop="${s.k}">${colHead(s,os.length+extra.length,sum&&s.k!=="perdu"?` · ${keur(sum)}${OPEN.includes(s.k)?" · pondéré "+keur(pd):""}`:"")}${extra.map(pcardC).join("")}${os.map(pcardO).join("")}</div>`}).join("");
   return head("Pipeline","Une carte = une opportunité (un besoin, une mission). Une même entreprise peut en avoir plusieurs.",`<button class="btn primary" data-act="new-opp">+ Opportunité</button>`)
-   +legacyNotice()+`<div class="toolbar"><input type="search" id="f-q" placeholder="Rechercher une opportunité, un account…" value="${esc(S.filters.q)}"></div>`
+   +legacyNotice()+activeFilterNote()+`<div class="toolbar"><input type="search" id="f-q" placeholder="Rechercher une opportunité, un account…" value="${esc(S.filters.q)}"></div>`
    +`<div class="board-wrap"><div class="board">${cols}</div></div>`;
 }
 function pcardO(o){
@@ -998,7 +1003,7 @@ function vComptes(){
     .sort((a,b)=>order[a.statut]-order[b.statut]||b.valeur-a.valeur);
   const multi=list.filter(a=>a.conv.length>1).length;
   return head("Accounts",`${list.length} entreprises${multi?` · <span class="late">${multi} avec plusieurs conversations en parallèle</span>`:""}`,`<button class="btn primary" data-act="new-compte">+ Account</button>`)
-   +`<div class="toolbar"><input type="search" id="f-q" placeholder="Rechercher une entreprise, un contact…" value="${esc(S.filters.q)}"></div>`
+   +activeFilterNote()+`<div class="toolbar"><input type="search" id="f-q" placeholder="Rechercher une entreprise, un contact…" value="${esc(S.filters.q)}"></div>`
    +(list.length?`<div class="accts">${list.map(acctCard).join("")}</div>`:`<div class="block"><div class="empty">Aucun account. Ils se créent automatiquement quand vous renseignez l'entreprise d'un contact.</div></div>`);
 }
 function acctCard(a){
@@ -1023,7 +1028,7 @@ function vContacts(){
   const bulk=S.sel.size?`<div class="notice" style="position:sticky;top:12px;z-index:5"><span><b style="color:var(--fg)">${S.sel.size}</b> sélectionné(s) · passer en :</span><span class="actions">${Object.entries(ACT).map(([k,a])=>`<button class="btn sm" data-bulk="${k}"><i class="dot" style="--c:var(${a.c})"></i>${a.l}</button>`).join("")}<button class="btn sm ghost" data-act="sel-clear">Annuler</button></span></div>`:"";
   return head("Base <em>de contacts</em>",`${S.contacts.length} personnes · board limité à ${LIM.accounts} comptes actifs et ${LIM.week} activations par semaine`,`<button class="btn primary" data-act="new-contact">+ Contact</button>`)
    +`<div class="tags"><span class="label">Activation</span>${Object.entries(ACT).map(([k,a])=>`<button class="pill" data-filter="act:${k}" aria-pressed="${S.filters.act===k}"><i class="dot" style="--c:var(${a.c})"></i>${a.l} · ${cnt(k)}</button>`).join("")}<button class="pill" data-filter="act:pipeline" aria-pressed="${S.filters.act==="pipeline"}">Pipeline · ${cnt("pipeline")}</button></div>`
-   +tagFilters(true)+bulk
+   +activeFilterNote()+tagFilters(true)+bulk
    +`<div class="table-wrap"><table><thead><tr><th><input type="checkbox" id="sel-all" aria-label="Tout sélectionner" ${list.length&&list.every(c=>S.sel.has(c.id))?"checked":""}></th>${th("nom","Nom")}${th("studio","Entreprise")}<th>Poste</th><th>Activation</th><th>Type</th><th>Source</th><th>Board</th><th>Chaleur</th>${th("last","Dernier contact")}<th>Prochaine action</th>${th("next","Date")}<th>Pays</th></tr></thead><tbody>
    ${list.map(c=>{const k2=compteKey(c),lc=lastContact(c),ex=c.exemple?' <span style="color:var(--faint);font-size:11px">exemple</span>':"";
      return`<tr data-open="${c.id}"><td data-nosel><input type="checkbox" class="sel" value="${c.id}" ${S.sel.has(c.id)?"checked":""} aria-label="Sélectionner"></td><td><span class="nm"><i class="dot" style="--c:var(${ccolor(c)})"></i>${esc(cname(c))}</span></td>
@@ -1587,7 +1592,7 @@ document.addEventListener("click",async e=>{
   const bkd=t.closest("[data-bk-dl]");if(bkd){await downloadBackup(bkd.dataset.bkDl);return}
   const sa=t.closest("[data-setact]");if(sa){await setActivation([sa.dataset.id],sa.dataset.setact);return}
   const bk=t.closest("[data-bulk]");if(bk){await setActivation([...S.sel],bk.dataset.bulk);return}
-  const af=t.closest("[data-actfilter]");if(af){S.filters.act=af.dataset.actfilter;go("contacts");return}
+  const af=t.closest("[data-actfilter]");if(af){S.filters.act=af.dataset.actfilter;S._keepAct=true;go("contacts");return}
   if(t.matches("input.sel")){t.checked?S.sel.add(t.value):S.sel.delete(t.value);render();return}
   if(t.closest("[data-nosel]"))return;
   const fl=t.closest("[data-filter]");if(fl){const[k,v]=fl.dataset.filter.split(":");S.filters[k]=S.filters[k]===v?"":v;render();return}
@@ -1638,6 +1643,7 @@ document.addEventListener("click",async e=>{
     case"sec-save":{const a1=val("sec-1"),a2=val("sec-2");if(a1.length<6){toast("Le code doit faire au moins 6 caractères.");break}if(a1!==a2){toast("Les deux codes ne correspondent pas.");break}
       const h=await sha(a1);try{await S.db.doc("reglages/securite").set({hash:h,maj:today()});ss.set("crm-unlocked",h);toast("Code d'accès activé");}catch(_){toast("Code non enregistré. Réessayez.")}break}
     case"sec-off":if(S.bk.secOff){try{await S.db.doc("reglages/securite").set({hash:"",maj:today()});ss.del("crm-unlocked");S.bk.secOff=false;toast("Code retiré")}catch(_){toast("Échec. Réessayez.")}}else{S.bk.secOff=true;render()}break;
+    case"clear-filters":clearFilters();render();break;
     case"toggle-all":S.home.showAll=!S.home.showAll;render();break;
     case"migrate":a.disabled=true;await migrateLegacy();break;
     case"do-import":a.disabled=true;await doImport();break;
