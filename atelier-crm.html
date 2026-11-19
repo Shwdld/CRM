@@ -475,6 +475,15 @@ body.locked .app,body.locked #layer{visibility:hidden}
 .tom-pipe span{color:var(--muted)}
 @media (max-width:1100px){.tiers{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media (max-width:760px){.tiers{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+.classify{display:flex;flex-direction:column;gap:14px;background:var(--raised);border-radius:22px;padding:16px 18px}
+.classify>div{display:flex;flex-direction:column;gap:7px}
+.classify small{font-size:12px}
+.classify .seg-f{background:var(--block)}
+.tier-quick{display:flex;align-items:center;gap:5px;flex-wrap:wrap;padding-right:58px}
+.tier-quick span{font-size:11px;color:var(--faint);text-transform:uppercase;letter-spacing:.05em;margin-right:2px}
+.tier-quick button{border:1px solid var(--line);background:none;border-radius:999px;padding:2px 9px;font-size:11px;color:var(--muted)}
+.tier-quick button:hover{background:var(--t);border-color:transparent;color:var(--brand-ink)}
 </style>
 
 <div class="app">
@@ -1127,7 +1136,7 @@ function vComptes(){
 }
 function acctCard(a){
   return`<article class="acct notched" data-openc="${esc(a.id)}">${notch("Ouvrir l'account",`data-openc="${esc(a.id)}"`)}
-    ${a.tier?`<span class="tier-pill" style="--t:${tierColor(a.tier)}">${TIERS[a.tier].l}</span>`:`<span class="tier-pill none">Priorité à définir</span>`}
+    ${a.tier?`<span class="tier-pill" style="--t:${tierColor(a.tier)}">${TIERS[a.tier].l}</span>`:`<div class="tier-quick"><span>Classer</span>${Object.entries(TIERS).map(([k,t])=>`<button type="button" data-settier="${k}" data-id="${esc(a.id)}" style="--t:${tierColor(k)}" title="${esc(t.d)}">${k==="opp"?"Opport.":k==="low"?"Low":t.l}</button>`).join("")}</div>`}
     <h3>${esc(a.nom)}</h3>
     <div class="meta">${esc([ACC_CAT[a.cat]||"Catégorie à classer",GEO[a.geo]].join(" · "))}</div>
     <div class="row"><span style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">${stag(a.statut)}${a.ancien?`<span class="pill">Ancien client</span>`:""}${a.contacts.length?heatDots(a.accHeat):""}</span><span class="val">${a.valeur?keur(a.valeur):""}</span></div>
@@ -1496,9 +1505,17 @@ function drawerContact(c){
 function drawerCompte(a){
   const cs=a.contacts.slice().sort((x,y)=>(chaleur(y)==="chaud")-(chaleur(x)==="chaud"));
   return`<div class="scrim" data-close></div><aside class="drawer" role="dialog" aria-label="Account">
-  <div class="drawer-h"><div style="flex:1;min-width:0"><input class="title-edit" id="a-nom" value="${esc(a.nom)}" aria-label="Nom de l'entreprise" title="Cliquez pour modifier"><div class="sub">${esc([ACC_TYPES[a.type],a.pays].filter(Boolean).join(" · ")||"Type et pays à préciser")}${stag(a.statut)}${a.contacts.length?heatDots(a.accHeat):""}<span class="muted" style="font-size:12px">· déduit de ses contacts</span></div></div>
+  <div class="drawer-h"><div style="flex:1;min-width:0"><input class="title-edit" id="a-nom" value="${esc(a.nom)}" aria-label="Nom de l'entreprise" title="Cliquez pour modifier"><div class="sub">${a.tier?`<span class="tier-pill" style="--t:${tierColor(a.tier)}">${TIERS[a.tier].l}</span>`:""}${esc([ACC_CAT[a.cat]||"Catégorie à classer",GEO[a.geo]].join(" · "))}${stag(a.statut)}${a.contacts.length?heatDots(a.accHeat):""}<span class="muted" style="font-size:12px">· déduit de ses contacts</span></div></div>
     <button class="round" data-close aria-label="Fermer">×</button></div>
   <div class="drawer-b">
+    <div class="classify">
+      <div><span class="label">Priorité</span><div class="seg-f" role="group" aria-label="Priorité">${Object.entries(TIERS).map(([k,t])=>`<button type="button" data-settier="${k}" data-id="${esc(a.id)}" aria-pressed="${a.tier===k}">${t.l}</button>`).join("")}</div>
+        <small class="muted">${a.tier?esc(TIERS[a.tier].d):"Pas encore classé : choisissez une priorité."}</small></div>
+      <div><span class="label">Catégorie</span><div class="seg-f" role="group" aria-label="Catégorie">${Object.entries({da:"Studio · DA",graph:"Studio · Design graphique",apporteur:"Apporteur d'affaires",marque:"Marque en direct"}).map(([k,l])=>`<button type="button" data-setacc="cat:${k}" data-id="${esc(a.id)}" aria-pressed="${a.cat===k}">${l}</button>`).join("")}</div>
+        ${a.doc&&a.doc.cat?"":`<small class="muted">${a.cat?"Devinée automatiquement : cliquez pour confirmer ou changer.":"Choisissez une catégorie."}</small>`}</div>
+      <div><span class="label">France / étranger</span><div class="seg-f" role="group" aria-label="France ou étranger">${Object.entries(GEO).map(([k,l])=>`<button type="button" data-setacc="geo:${k}" data-id="${esc(a.id)}" aria-pressed="${a.geo===k}">${l}</button>`).join("")}</div>
+        ${a.doc&&a.doc.geo?"":`<small class="muted">Déduit de la localisation des contacts.</small>`}</div>
+    </div>
     <div class="facts"><div><span class="label">Dernier mouvement</span><b>${a.lastMove?ago(a.lastMove.d):"—"}</b></div>
       <div><span class="label">Opportunités ouvertes</span><b>${a.open.length}${a.valeur?" · "+keur(a.valeur):""}</b></div>
       <div><span class="label">Prochaine action</span><b class="${a.next&&a.next.date<today()?"late":""}">${a.next?rel(a.next.date):"—"}</b></div></div>
@@ -1514,9 +1531,6 @@ function drawerCompte(a){
         <div class="st">${ctag(c)}${heatDots(chaleur(c))}<small>Dernier échange : ${lc?ago(lc.d).toLowerCase():"—"}</small></div>
         <button class="star ${a.principal&&a.principal.id===c.id?"on":""}" data-principal="${c.id}" title="Contact principal" aria-label="Contact principal">★</button></div>`}).join("")||`<div class="muted">Aucun contact rattaché.</div>`}</div></div>
     <div class="form">
-      <div class="field full"><span class="label">Priorité</span><div class="seg-f" role="group" aria-label="Priorité">${Object.entries(TIERS).map(([k,t])=>`<button type="button" data-settier="${k}" data-id="${esc(a.id)}" aria-pressed="${a.tier===k}" title="${esc(t.d)}">${t.l}</button>`).join("")}</div></div>
-      <label class="field"><span class="label">Catégorie</span><select id="a-cat">${opt(ACC_CAT,a.doc&&a.doc.cat||"","Auto · "+(ACC_CAT[a.cat]||"à classer"))}</select></label>
-      <label class="field"><span class="label">France / étranger</span><select id="a-geo">${opt(GEO,a.doc&&a.doc.geo||"","Auto · "+GEO[a.geo])}</select></label>
       <label class="field"><span class="label">Type de compte</span><select id="a-type">${opt(ACC_TYPES,a.type,"—")}</select></label>
       <label class="field"><span class="label">Pays / marché</span><input id="a-pays" value="${esc(a.pays)}"></label>
       <label class="field full"><span class="label">Notes stratégiques sur l'organisation</span><textarea id="a-notes" placeholder="Qui décide, comment ils travaillent, relations internes…">${esc(a.notes)}</textarea></label>
@@ -1726,6 +1740,8 @@ document.addEventListener("click",async e=>{
   const dn=t.closest("[data-done-c]");if(dn){const o=S.opps.find(x=>x.contactId===dn.dataset.doneC&&ostage(x)==="signe"&&!projectDone(x));if(o){await projectFinished(o);closeLayer()}return}
   const afb=t.closest("[data-af]");if(afb){const[k,v]=afb.dataset.af.split(":");S.af[k]=S.af[k]===v||(v==="1"&&S.af[k])?"":v;render();return}
   const afg=t.closest("[data-afgroup]");if(afg){S.af.group=afg.dataset.afgroup;render();return}
+  const sac=t.closest("[data-setacc]");if(sac){const[k,v]=sac.dataset.setacc.split(":");const ac=accounts().find(x=>x.id===sac.dataset.id);if(!ac)return;const id=await materialize(ac);if(!id)return;
+    if(await save("comptes",id,{[k]:v}))toast((k==="cat"?"Catégorie : "+ACC_CAT[v]:GEO[v]));if(id!==ac.id)open("compte",id);return}
   const tp=t.closest("[data-settier]");if(tp){const ac=accounts().find(x=>x.id===tp.dataset.id);if(!ac)return;const id=await materialize(ac);if(!id)return;
     const v=ac.tier===tp.dataset.settier?"":tp.dataset.settier;if(await save("comptes",id,{tier:v}))toast(v?"Priorité : "+TIERS[v].l:"Priorité retirée");if(id!==ac.id)open("compte",id);return}
   const sa=t.closest("[data-setact]");if(sa){await setActivation([sa.dataset.id],sa.dataset.setact);return}
@@ -1897,7 +1913,7 @@ async function materialize(a){
 }
 async function saveCompte(){
   const a=accounts().find(x=>x.id===S.L.id);if(!a)return;
-  const body={nom:val("a-nom").trim(),cat:val("a-cat"),geo:val("a-geo"),type:val("a-type"),pays:val("a-pays").trim(),notes:val("a-notes"),nextLabel:val("a-nextlabel").trim(),nextDate:val("a-nextdate")};
+  const body={nom:val("a-nom").trim(),type:val("a-type"),pays:val("a-pays").trim(),notes:val("a-notes"),nextLabel:val("a-nextlabel").trim(),nextDate:val("a-nextdate")};
   if(!body.nom){toast("Donnez un nom à l'entreprise.");return}
   const id=await materialize(a);if(!id)return;
   if(await save("comptes",id,body)){if(norm(body.nom)!==norm(a.nom))for(const c of a.contacts)await save("contacts",c.id,{studio:body.nom,compteId:id});toast("Account enregistré");closeLayer()}
