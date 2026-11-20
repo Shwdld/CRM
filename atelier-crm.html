@@ -493,6 +493,30 @@ body.locked .app,body.locked #layer{visibility:hidden}
 .heat-pick button:not(.lnk).on{background:var(--brand)}
 .heat-pick em{font-style:normal}
 .heat-pick .lnk{font-size:11px;color:var(--faint)}
+
+/* Tri de la base */
+.tri-tabs{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.tri-tab{border:0;background:var(--raised);border-radius:20px;padding:12px 14px;text-align:left;display:flex;flex-direction:column;gap:4px;min-width:0}
+.tri-tab span{display:flex;align-items:center;gap:7px;font-size:12.5px;font-weight:500}
+.tri-tab b{font-family:var(--f-title);font-weight:400;font-size:30px;line-height:1}
+.tri-tab small{color:var(--muted);font-size:11.5px;line-height:1.35}
+.tri-tab.on{box-shadow:0 0 0 2px var(--brand)}
+.focus-pick{display:inline-flex;gap:4px;align-items:center}
+.focus-pick button{border:1px solid var(--line);background:none;border-radius:999px;padding:3px 9px;font-size:11.5px;color:var(--muted)}
+.focus-pick button.on{background:color-mix(in srgb,var(--c) 30%,var(--raised));border-color:transparent;color:var(--fg);font-weight:500}
+.focus-pick button.on.sug{background:none;border:1px dashed var(--c);color:var(--fg)}
+.focus-pick button.act{border-color:var(--brand);color:var(--fg)}
+.focus-pick button.act:hover{background:var(--brand);color:var(--brand-ink)}
+.tri-quick h2{font-size:44px}
+.tri-big{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.tri-big button{border:1px solid var(--line);background:var(--raised);border-radius:22px;padding:16px;text-align:left;display:flex;flex-direction:column;gap:4px;position:relative}
+.tri-big button:hover{border-color:var(--c);box-shadow:inset 0 0 0 1px var(--c)}
+.tri-big button.sug{box-shadow:inset 0 0 0 2px var(--c)}
+.tri-big b{font-family:var(--f-title);font-weight:400;font-size:28px;line-height:1}
+.tri-big small{color:var(--muted);font-size:12px}
+.tri-big kbd{position:absolute;top:12px;right:14px;font:500 11px var(--f-ui);color:var(--faint);border:1px solid var(--line);border-radius:6px;padding:1px 6px}
+@media (max-width:1100px){.tri-tabs{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media (max-width:760px){.tri-tabs,.tri-big{grid-template-columns:repeat(2,minmax(0,1fr))}}
 </style>
 
 <div class="app">
@@ -530,7 +554,9 @@ const PROSPECT=[
   {k:"reactiver",l:"À réactiver",c:"--c-react",d:"À reprendre avec un nouvel angle ou à une date choisie"},
 ];
 /* Niveau d'activation : seul ce qui est activé apparaît dans le board et les relances dues */
-const ACT={backlog:{l:"Backlog",c:"--c-todo"},mois:{l:"Ce mois-ci",c:"--c-react"},semaine:{l:"Cette semaine",c:"--c-contact"},actif:{l:"Actif maintenant",c:"--c-conv"},pause:{l:"En pause",c:"--c-sommeil"}};
+/* Tri de la base (Now / Reactivate / Later / Out) + sélection active de la semaine (Cette semaine / Actif) */
+const FOCUS={now:{l:"Now",s:"À activer maintenant",c:"--c-qualif",d:"Les meilleurs prospects à activer dans les prochaines semaines"},reactivate:{l:"Reactivate",s:"À réactiver",c:"--c-react",d:"Déjà contactés, silence depuis longtemps : à relancer avec un nouvel angle"},later:{l:"Later",s:"Backlog plus tard",c:"--c-todo",d:"Pas prioritaire pour l'instant, on y reviendra"},out:{l:"Out",s:"Hors focus",c:"--c-perdu",d:"Fit trop faible ou pas pertinent aujourd'hui"}};
+const ACT={now:{l:"Now",c:"--c-qualif"},reactivate:{l:"Reactivate",c:"--c-react"},later:{l:"Later",c:"--c-todo"},out:{l:"Out",c:"--c-perdu"},semaine:{l:"Cette semaine",c:"--c-contact"},actif:{l:"Actif maintenant",c:"--c-conv"}};
 const LIM={week:10,accounts:20};
 const C_STAGE=Object.fromEntries([...PROSPECT,{k:"tom",l:"Top of mind",c:"--c-conv"},{k:"pipeline",l:"Pipeline",c:"--c-qualif"}].map(s=>[s.k,s]));
 /* Les 3 zones du cycle : Prospection → Top of mind ⇄ Pipeline */
@@ -628,17 +654,38 @@ function chaleur(c){
   if(c.type==="tiede"||c.type==="ancien_client")return"tiede";
   return"froid";
 }
-const actv=c=>cboard(c)!=="prospect"?zoneOf(c):(c.activation&&ACT[c.activation]?c.activation:(DORMANT_C.includes(cstage(c))?"pause":"backlog"));
+/* Suggestion automatique de tri, tant que vous n'avez pas choisi vous-même */
+function suggestFocus(c){
+  const acc=IDX.byId[compteKey(c)]||{},tier=acc.tier,s=cstage(c),lc=lastContact(c),days=lc?diff(today(),lc.d):999;
+  if(tier==="low")return"out";
+  if(DORMANT_C.includes(s))return"reactivate";
+  if(s==="contacte"||s==="relance")return lc&&days>=60?"reactivate":"now";
+  if(tier==="core"||tier==="strong"||["reco","intro","inbound"].includes(c.source)||["tiede","ancien_client"].includes(c.type))return"now";
+  return"later";
+}
+function suggestFocusWhy(c){
+  const acc=IDX.byId[compteKey(c)]||{},s=cstage(c),lc=lastContact(c),days=lc?diff(today(),lc.d):null;
+  if(acc.tier==="low")return"account Low priority";
+  if(DORMANT_C.includes(s))return"en sommeil après les relances";
+  if((s==="contacte"||s==="relance")&&days!==null)return days>=60?"sans nouvelles depuis "+days+" jours":"contacté il y a "+days+" jours";
+  if(acc.tier==="core"||acc.tier==="strong")return"account "+TIERS[acc.tier].l;
+  if(["reco","intro","inbound"].includes(c.source))return SOURCES[c.source].toLowerCase();
+  if(["tiede","ancien_client"].includes(c.type))return TYPES[c.type].toLowerCase();
+  return"jamais contacté";
+}
+const focusOf=c=>FOCUS[c.focus]?c.focus:c.activation==="mois"?"now":c.activation==="pause"?"reactivate":suggestFocus(c);
+const focusManual=c=>!!FOCUS[c.focus];
+const actv=c=>cboard(c)!=="prospect"?zoneOf(c):(["semaine","actif"].includes(c.activation)?c.activation:focusOf(c));
 const onBoard=c=>cboard(c)==="prospect"&&["semaine","actif"].includes(actv(c));
 const boardAccounts=()=>new Set(S.contacts.filter(onBoard).map(c=>compteKey(c)||c.id));
 const weekUsed=()=>S.contacts.filter(c=>c.activeLe&&c.activeLe>=monday()).length;
 const isTom=c=>zoneOf(c)==="tom";
 /* « suivi » = ce qui a une prochaine action pertinente (activé, réactivation en pause, ou a répondu sans opportunité) */
-const isTracked=c=>onBoard(c)||(actv(c)==="pause"&&DORMANT_C.includes(cstage(c)))||isTom(c);
-const isDue=c=>(isTom(c)&&c.next&&c.next.date&&c.next.date<=today())||cboard(c)==="prospect"&&c.next&&c.next.date&&c.next.date<=today()&&(onBoard(c)||(actv(c)==="pause"&&DORMANT_C.includes(cstage(c))));
-function suggestScore(c){let s=0;if(actv(c)==="mois")s+=5;if((c.relances||0)>0)s+=3;s+={chaud:4,tiede:2,froid:0,dormant:-1}[chaleur(c)]||0;
+const isTracked=c=>onBoard(c)||isTom(c);
+const isDue=c=>(isTom(c)||onBoard(c))&&!!(c.next&&c.next.date&&c.next.date<=today());
+function suggestScore(c){let s=0;const f=focusOf(c);if(f==="now")s+=6;if(f==="reactivate")s+=3;if(f==="out")s-=10;if((c.relances||0)>0)s+=3;s+={chaud:4,tiede:2,froid:0,dormant:-1}[chaleur(c)]||0;
   if(["tiede","ancien_client"].includes(c.type))s+=2;if(["reco","intro","inbound"].includes(c.source))s+=2;if(c.email||c.linkedin)s+=1;if(c.next&&c.next.date&&c.next.date<=today())s+=1;return s}
-function suggestReason(c){const r=[];if(actv(c)==="mois")r.push("prévu ce mois-ci");if((c.relances||0)>0)r.push("déjà contacté");if(["reco","intro","inbound"].includes(c.source))r.push(SOURCES[c.source].toLowerCase());
+function suggestReason(c){const r=[];r.push(FOCUS[focusOf(c)].l);if((c.relances||0)>0)r.push("déjà contacté");if(["reco","intro","inbound"].includes(c.source))r.push(SOURCES[c.source].toLowerCase());
   if(["tiede","ancien_client"].includes(c.type))r.push(TYPES[c.type].toLowerCase());if(chaleur(c)==="chaud"||chaleur(c)==="tiede")r.push(CHALEURS[chaleur(c)].toLowerCase());return r.join(" · ")||"à découvrir"}
 const cLate=c=>!!(c.next&&c.next.date&&c.next.date<today());
 function lastOf(hist){const h=(hist||[]).find(x=>!/^Fiche créée/.test(x.t));return h||null}
@@ -673,13 +720,13 @@ function applyC(c,ev,opts={}){
     case"envoye":{const fresh=DORMANT_C.includes(cstage(c))||cstage(c)==="tom";const n=fresh?1:(c.relances||0)+1;p.relances=n;
       log(fresh?"Message de réactivation envoyé":n===1?"Premier message envoyé":"Relance "+(n-1)+" envoyée");
       const r=rythme(c,n,t);p.stage=r.stage;p.next=r.next;if(fresh){p.activation="actif";if(!(c.activeLe>=monday()))p.activeLe=t}
-      if(r.stage==="sommeil"){p.activation="pause";log("Pas de réponse après 3 relances · mise en sommeil · place libérée")}break}
-    case"sommeil":p.stage="sommeil";p.activation="pause";p.next={date:opts.date||addDays(t,75),label:"Fin de la pause : réactiver ?"};log("Mis en sommeil");break;
-    case"reactiver":p.stage="reactiver";p.activation="pause";p.next={date:opts.date||addDays(t,30),label:"Réactiver avec un nouvel angle"};log("À réactiver");break;
+      if(r.stage==="sommeil"){p.activation="";p.focus="reactivate";log("Pas de réponse après 3 relances · mise en sommeil · place libérée")}break}
+    case"sommeil":p.stage="sommeil";p.activation="";p.focus="reactivate";p.next={date:opts.date||addDays(t,75),label:"Fin de la pause : réactiver ?"};log("Mis en sommeil");break;
+    case"reactiver":p.stage="reactiver";p.activation="";p.focus="reactivate";p.next={date:opts.date||addDays(t,30),label:"Réactiver avec un nouvel angle"};log("À réactiver");break;
     case"a_contacter":p.stage="a_contacter";p.next={date:t,label:"Envoyer le premier message"};break;
     case"repondu":p.stage="tom";p.tomSeg=c.tomSeg||(c.type==="apporteur"?"apporteur":c.type==="ancien_client"?"ancien":"echange");p.activation="";p.next={date:addDays(t,14),label:"Garder le lien · proposer un échange"};p.converti=t;log("A répondu · passe en Top of mind");break;
     case"touch":p.next={date:addDays(t,cadence(c)),label:"Prendre des nouvelles"};log("Prise de nouvelles");break;
-    case"prospect":p.stage="contacte";p.activation="backlog";p.next={date:addDays(t,7),label:"Relance"};log("Repassé en prospection");break;
+    case"prospect":p.stage="contacte";p.activation="";p.focus="later";p.next={date:addDays(t,7),label:"Relance"};log("Repassé en prospection");break;
     case"suivi":p.next={date:addDays(t,7),label:(c.next&&c.next.label)||"Suivi"};log("Suivi · "+((c.next&&c.next.label)||"contact"));break;
   }
   p.hist=h.slice(0,60);p.maj=t;return p;
@@ -782,7 +829,7 @@ const siblings=c=>{const k=compteKey(c);return k?S.contacts.filter(x=>x.id!==c.i
 
 /* ───────── État & stockage ───────── */
 const S={contacts:[],projets:[],comptes:[],opps:[],obj:{},view:"today",filters:{q:"",type:"",source:"",board:"",chaleur:"",act:""},sort:{k:"next",dir:1},
-  af:{group:"cat"},params:{},backups:[],sec:{},bk:{busy:"",confirm:""},home:{weeks:2,editGoals:false,showAll:false},sel:new Set(),fill:false,fc:{period:"mois",edit:false},ready:false,db:null,L:null};
+  tri:{tab:"todo",quick:false,queue:[],i:0,done:0,limit:50},af:{group:"cat"},params:{},backups:[],sec:{},bk:{busy:"",confirm:""},home:{weeks:2,editGoals:false,showAll:false},sel:new Set(),fill:false,fc:{period:"mois",edit:false},ready:false,db:null,L:null};
 const esc=s=>String(s??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
 const norm=s=>(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/\(exemple\)/g,"").replace(/[^a-z0-9]+/g," ").trim();
 const store={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v)}catch(e){}}};
@@ -821,7 +868,7 @@ async function boot(){
 }
 
 /* ───────── Navigation & thème ───────── */
-const VIEWS=[["today","Dashboard"],["dues","Relances dues"],["prospect","Prospection"],["tom","Top of mind"],["pipeline","Pipeline"],["comptes","Accounts"],["contacts","Base de contacts"],["projets","Projets"],["forecast","Revenue forecast"],["import","Importer"],["params","Paramètres"]];
+const VIEWS=[["today","Dashboard"],["dues","Relances dues"],["tri","Tri"],["prospect","Prospection"],["tom","Top of mind"],["pipeline","Pipeline"],["comptes","Accounts"],["contacts","Base de contacts"],["projets","Projets"],["forecast","Revenue forecast"],["import","Importer"],["params","Paramètres"]];
 function dueCount(){return S.contacts.filter(isDue).length+S.opps.filter(o=>OPEN.includes(ostage(o))&&o.next&&o.next.date&&o.next.date<=today()).length}
 function renderNav(){
   const due=dueCount();
@@ -959,14 +1006,14 @@ function questRow(it){
 function blocPipe(){
   const tomN=S.contacts.filter(isTom).length;
   const parts=[...PROSPECT.map(s=>({s,n:S.contacts.filter(c=>onBoard(c)&&cstage(c)===s.k).length})),{s:{l:"Top of mind",c:"--c-conv"},n:tomN},...PIPE.map(s=>({s,n:S.opps.filter(o=>ostage(o)===s.k).length}))].filter(x=>x.n);
-  const pros=S.contacts.filter(onBoard),backlogN=S.contacts.filter(c=>actv(c)==="backlog").length,open=S.opps.filter(o=>OPEN.includes(ostage(o)));
+  const pros=S.contacts.filter(onBoard),backlogN=S.contacts.filter(c=>actv(c)==="now").length,open=S.opps.filter(o=>OPEN.includes(ostage(o)));
   const brut=open.reduce((t,o)=>t+(+o.valeur||0),0),pond=open.reduce((t,o)=>t+pondere(o),0);
   const proDue=pros.filter(c=>c.next&&c.next.date<=today()).length;
   return`<section class="block folder span-12"><div class="b-h"><div><h2>Le pipe</h2><p>${pros.length} prospects · ${open.length} opportunités ouvertes${brut?` · ${keur(brut)} brut · ${keur(pond)} pondéré`:""}</p></div></div>
     <div class="stack" role="img" aria-label="Répartition par étape">${parts.map(x=>`<i style="--c:var(${x.s.c});flex:${x.n}" title="${x.s.l} : ${x.n}"></i>`).join("")}</div>
     <div class="stack-leg">${parts.map(x=>`<span><i class="dot" style="--c:var(${x.s.c})"></i>${x.s.l} <b>${x.n}</b></span>`).join("")}</div>
     <div class="boards">
-      <a class="bcard notched" href="#prospect">${NOTCH_STATIC}<b>Prospection <em>&amp; relances</em></b><small>${pros.length} activés · ${proDue} à jouer aujourd'hui · ${backlogN} en backlog</small>
+      <a class="bcard notched" href="#prospect">${NOTCH_STATIC}<b>Prospection <em>&amp; relances</em></b><small>${pros.length} activés · ${proDue} à jouer aujourd'hui · ${backlogN} en « Now »</small>
         <div class="dots">${PROSPECT.map(s=>`<i style="--c:var(${s.c})"></i>`).join("")}</div></a>
       <a class="bcard notched" href="#tom">${NOTCH_STATIC}<b>Top <em>of mind</em></b><small>${tomN} relations · ${S.contacts.filter(c=>isTom(c)&&c.next&&c.next.date<=today()).length} rappel(s) dû(s)</small>
         <div class="dots">${TOM.map(s=>`<i style="--c:var(${s.c})"></i>`).join("")}</div></a>
@@ -1014,7 +1061,7 @@ function tagFilters(withBoard){
 }
 function colHead(s,n,extra=""){return`<div class="col-h"><div class="t"><span><i class="dot" style="--c:var(${s.c})"></i>${s.l}</span><em>${n}</em></div><small>${s.d}${extra}</small></div><div class="col-bar" style="--c:var(${s.c})"></div>`}
 function activationPanel(){
-  const used=weekUsed(),accs=boardAccounts().size,mois=S.contacts.filter(c=>actv(c)==="mois").length,back=S.contacts.filter(c=>actv(c)==="backlog").length,pause=S.contacts.filter(c=>actv(c)==="pause").length;
+  const used=weekUsed(),accs=boardAccounts().size,fc=k=>S.contacts.filter(c=>cboard(c)==="prospect"&&actv(c)===k).length;
   const g=(v,max,l,c)=>`<div class="goal" style="--c:var(${v>=max?"--late":c})"><div class="top"><span>${l}</span><b>${v}<small> / ${max}</small></b></div><div class="chunk" style="background:var(--line-soft)"><i style="width:${Math.min(100,v/max*100)}%"></i></div></div>`;
   let fill="";
   if(S.fill){const f=fillSuggestions();
@@ -1022,9 +1069,9 @@ function activationPanel(){
       <div class="actions"><button class="btn primary" data-act="fill-go">Activer la sélection</button><button class="btn ghost" data-act="fill-close">Fermer</button><span class="muted" style="font-size:12px">Place disponible cette semaine : ${f.room}</span></div>`
       :`<div class="alert">Limite atteinte. Avancez les prospects actifs ou mettez-en en pause pour libérer de la place.</div><div><button class="btn ghost sm" data-act="fill-close">Fermer</button></div>`}
   return`<section class="block folder" style="margin-bottom:46px;--tab-w:30%"><div class="b-h"><div><h2>Activation</h2><p>Le board n'affiche que les prospects activés (cette semaine ou actifs). Tout le reste attend dans la base.</p></div>
-      <div class="actions"><button class="btn primary" data-act="fill-open">Remplir ma semaine</button><button class="btn" data-goto="contacts">Gérer la base</button></div></div>
+      <div class="actions"><button class="btn primary" data-act="fill-open">Remplir ma semaine</button><button class="btn" data-goto="tri">Trier la base</button></div></div>
     <div class="goals" style="color:var(--fg)">${g(accs,LIM.accounts,"Comptes actifs dans le board","--c-conv")}${g(used,LIM.week,"Nouveaux prospects activés cette semaine","--c-contact")}</div>
-    <div class="qsum">${[["mois",mois],["backlog",back],["pause",pause]].map(([k,n])=>`<button class="pill" data-actfilter="${k}" style="padding:5px 12px"><i class="dot" style="--c:var(${ACT[k].c})"></i>${ACT[k].l} <b style="margin-left:4px">${n}</b></button>`).join("")}</div>
+    <div class="qsum">${Object.entries(FOCUS).map(([k,f])=>`<button class="pill" data-trigo="${k}" style="padding:5px 12px"><i class="dot" style="--c:var(${f.c})"></i>${f.l} <b style="margin-left:4px">${fc(k)}</b></button>`).join("")}<button class="pill" data-trigo="todo" style="padding:5px 12px">Trier la base →</button></div>
     ${fill}</section>`;
 }
 function vProspect(){
@@ -1052,6 +1099,60 @@ function pcardC(c){
   </div>`;
 }
 
+/* ───────── TRI DE LA BASE ───────── */
+const triPool=()=>S.contacts.filter(c=>cboard(c)==="prospect"&&!onBoard(c));
+function vTri(){
+  const T=S.tri,pool=triPool(),q=S.filters.q.trim().toLowerCase();
+  const cnt=k=>k==="todo"?pool.filter(c=>!focusManual(c)).length:pool.filter(c=>focusOf(c)===k).length;
+  const used=weekUsed(),room=Math.max(0,Math.min(LIM.week-used,LIM.accounts-boardAccounts().size));
+  const tabs=[["todo","À trier","--c-todo","Pas encore triés à la main · une suggestion est proposée"],...Object.entries(FOCUS).map(([k,f])=>[k,f.l+" · "+f.s,f.c,f.d])];
+  let list=T.tab==="todo"?pool.filter(c=>!focusManual(c)):pool.filter(c=>focusOf(c)===T.tab);
+  if(q)list=list.filter(c=>[c.nom,c.studio,compteName(c),c.note].join(" ").toLowerCase().includes(q));
+  const ord={now:0,reactivate:1,later:2,out:3};
+  list.sort((a,b)=>T.tab==="todo"?(ord[focusOf(a)]-ord[focusOf(b)]||suggestScore(b)-suggestScore(a)):suggestScore(b)-suggestScore(a));
+  const head1=head("Tri <em>de la base</em>",`${plural(pool.length,"prospect")} hors sélection · avancez petit à petit`,`<button class="btn primary" data-act="tri-quick">Tri rapide · 20 prospects</button>`);
+  const gauge=`<section class="block folder" style="margin-bottom:46px;--tab-w:28%"><div class="b-h"><div><h2>Cette semaine</h2><p>${used} / ${LIM.week} prospects activés · ${boardAccounts().size} / ${LIM.accounts} comptes actifs dans le board${room?` · encore ${room} place${room>1?"s":""}`:" · limite atteinte"}</p></div>
+      <div class="actions"><button class="btn" data-goto="prospect">Voir le board</button></div></div>
+    <div class="chunk" style="background:var(--line-soft);--c:var(--c-contact)"><i style="width:${Math.min(100,used/LIM.week*100)}%"></i></div>
+    <div class="tri-tabs">${tabs.map(([k,l,c,d])=>`<button class="tri-tab ${T.tab===k?"on":""}" data-tritab="${k}"><span><i class="dot" style="--c:var(${c})"></i>${esc(l)}</span><b>${cnt(k)}</b><small>${esc(d)}</small></button>`).join("")}</div></section>`;
+  if(T.quick)return head1+gauge+quickTri();
+  const bulk=S.sel.size?`<div class="notice" style="position:sticky;top:12px;z-index:5"><span><b style="color:var(--fg)">${S.sel.size}</b> sélectionné(s) · passer en :</span><span class="actions">${Object.entries(FOCUS).map(([k,f])=>`<button class="btn sm" data-bulk="${k}"><i class="dot" style="--c:var(${f.c})"></i>${f.l}</button>`).join("")}<button class="btn sm primary" data-bulk="semaine">Activer cette semaine</button><button class="btn sm ghost" data-act="sel-clear">Annuler</button></span></div>`:"";
+  const shown=list.slice(0,T.limit);
+  const row=c=>{const f=focusOf(c),acc=IDX.byId[compteKey(c)]||{},lc=lastContact(c);
+    return`<tr data-open="${c.id}"><td data-nosel><input type="checkbox" class="sel" value="${c.id}" ${S.sel.has(c.id)?"checked":""} aria-label="Sélectionner"></td>
+      <td><span class="nm"><i class="dot" style="--c:var(${ccolor(c)})"></i>${esc(cname(c))}</span></td><td>${esc(compteName(c)||"—")}</td>
+      <td>${acc.tier?`<span class="tier-pill" style="--t:${tierColor(acc.tier)}">${TIERS[acc.tier].l}</span>`:`<span class="muted">—</span>`}</td>
+      <td>${esc(clabel(c))}</td><td>${lc?ago(lc.d):"Jamais"}</td>
+      <td class="wrap"><span class="muted">${focusManual(c)?"Choisi":"Suggéré"} · ${esc(suggestFocusWhy(c))}</span></td>
+      <td data-nosel><span class="focus-pick">${Object.entries(FOCUS).map(([k,x])=>`<button type="button" data-setact="${k}" data-id="${c.id}" class="${f===k?"on":""}${f===k&&!focusManual(c)?" sug":""}" style="--c:var(${x.c})" title="${esc(x.s)}">${x.l}</button>`).join("")}<button type="button" class="act" data-setact="semaine" data-id="${c.id}" title="Activer cette semaine">Activer</button></span></td></tr>`};
+  return head1+gauge+activeFilterNote()
+   +`<div class="toolbar"><input type="search" id="f-q" placeholder="Rechercher un prospect, une entreprise…" value="${esc(S.filters.q)}"></div>`+bulk
+   +(list.length?`<div class="table-wrap"><table><thead><tr><th><input type="checkbox" id="sel-all-tri" aria-label="Tout sélectionner" ${shown.length&&shown.every(c=>S.sel.has(c.id))?"checked":""}></th><th>Nom</th><th>Entreprise</th><th>Priorité</th><th>Étape</th><th>Dernier contact</th><th>Pourquoi</th><th>Tri</th></tr></thead><tbody>${shown.map(row).join("")}</tbody></table></div>
+      ${list.length>shown.length?`<button class="btn ghost" data-act="tri-more" style="margin-top:12px">Afficher 50 de plus (${list.length-shown.length} restants)</button>`:""}`
+     :`<div class="block"><div class="empty">${T.tab==="todo"?"<b>Toute la base est triée.</b> Bravo.":"Aucun prospect dans cette catégorie."}</div></div>`);
+}
+/* Tri rapide : un prospect à la fois, 4 boutons (touches 1 à 4) */
+function quickTri(){
+  const T=S.tri,c=S.contacts.find(x=>x.id===T.queue[T.i]);
+  if(!c)return`<section class="block"><div class="cheer">${FLAME.replace("<svg",'<svg width="36" height="36"')}<div><b>Série terminée : ${T.done} prospect${T.done>1?"s":""} trié${T.done>1?"s":""}.</b><div class="muted">Revenez demain pour une nouvelle série, ou continuez.</div></div></div>
+    <div class="actions" style="margin-top:12px"><button class="btn primary" data-act="tri-quick">Encore 20</button><button class="btn ghost" data-act="tri-stop">Revenir à la liste</button></div></section>`;
+  const acc=IDX.byId[compteKey(c)]||{},lc=lastContact(c),sug=focusOf(c);
+  return`<section class="block tri-quick"><div class="b-h"><div><span class="label">Tri rapide · ${T.i+1} / ${T.queue.length}</span>
+      <h2 style="margin-top:8px">${esc(cname(c))}</h2><p>${esc([c.poste,compteName(c)].filter(Boolean).join(" chez "))}${acc.tier?" · "+TIERS[acc.tier].l:""}${ACC_CAT[acc.cat]?" · "+ACC_CAT[acc.cat]:""}</p></div>
+      <button class="btn ghost sm" data-act="tri-stop">Arrêter</button></div>
+    <div class="chunk" style="background:var(--line-soft);--c:var(--c-conv)"><i style="width:${T.i/T.queue.length*100}%"></i></div>
+    <div class="facts"><div><span class="label">Étape</span><b>${esc(clabel(c))}</b></div><div><span class="label">Dernier contact</span><b>${lc?ago(lc.d):"Jamais"}</b></div><div><span class="label">Suggestion</span><b>${FOCUS[sug].l} · ${esc(suggestFocusWhy(c))}</b></div></div>
+    ${c.note?`<div class="tip">${esc(c.note)}</div>`:""}
+    <div class="tri-big">${Object.entries(FOCUS).map(([k,f],i)=>`<button type="button" data-quick="${k}" class="${k===sug?"sug":""}" style="--c:var(${f.c})"><kbd>${i+1}</kbd><b>${f.l}</b><small>${esc(f.s)}</small></button>`).join("")}</div>
+    <div class="actions"><button class="btn sm ghost" data-quick="skip">Passer (→)</button><button class="btn sm ghost" data-open="${c.id}">Ouvrir la fiche</button><span class="muted" style="font-size:12px">Raccourcis : 1 Now · 2 Reactivate · 3 Later · 4 Out</span></div>
+  </section>`;
+}
+async function quickPick(k){
+  const T=S.tri,id=T.queue[T.i];if(!id)return;
+  if(k!=="skip"){const c=S.contacts.find(x=>x.id===id);if(c&&await save("contacts",id,{focus:k,activation:"",maj:today()}))T.done++}
+  T.i++;render();
+}
+
 /* ───────── RELANCES DUES ───────── */
 function vDues(){
   const items=questItems(),late=items.filter(i=>i.late),now=items.filter(i=>!i.late),wk=addDays(today(),7);
@@ -1062,9 +1163,9 @@ function vDues(){
   const sec=(t,l)=>l.length?`<section class="block folder" style="--tab-w:24%"><div class="b-h"><div><h2>${t}</h2><p>${plural(l.length,"action")} · triées par priorité</p></div></div><div class="quests">${l.map(questRow).join("")}</div></section>`:"";
   return head("Relances <em>dues</em>","Prospects activés, contacts qui ont répondu et opportunités dont l'action est échue ou prévue aujourd'hui, puis ce qui arrive dans la semaine.")
    +`<div style="display:flex;flex-direction:column;gap:46px;margin-top:32px">`
-   +(items.length?sec("En retard",late)+sec("Aujourd'hui",now):`<section class="block folder"><div class="b-h"><div><h2>Rien de dû</h2><p>Toutes les relances sont à jour. Activez de nouveaux prospects depuis la Prospection si vous avez de la place.</p></div></div></section>`)
+   +(items.length?sec("En retard",late)+sec("Aujourd'hui",now):`<section class="block folder"><div class="b-h"><div><h2>Rien de dû</h2><p>Toutes les relances sont à jour. Activez de nouveaux prospects depuis l'onglet Tri si vous avez de la place.</p></div></div></section>`)
    +(soon.length?`<section class="block folder" style="--tab-w:24%"><div class="b-h"><div><h2>À venir</h2><p>Les 7 prochains jours · pour anticiper</p></div></div><div class="sibs">${soon.map(soonRow).join("")}</div></section>`:"")
-   +`</div>`+(hidden?`<p class="muted" style="margin-top:16px;font-size:12.5px">${plural(hidden,"contact")} du backlog ou de « Ce mois-ci » ont une date passée : ils n'apparaissent pas ici tant qu'ils ne sont pas activés. <button class="lnk" data-actfilter="backlog">Voir la base</button></p>`:"");
+   +`</div>`+(hidden?`<p class="muted" style="margin-top:16px;font-size:12.5px">${plural(hidden,"contact")} hors de la sélection active ont une date passée : ils n'apparaissent pas ici tant qu'ils ne sont pas activés. <button class="lnk" data-actfilter="backlog">Voir la base</button></p>`:"");
 }
 
 /* ───────── TOP OF MIND ───────── */
@@ -1440,7 +1541,7 @@ function drawerQuick(kind,d){
     <label class="field full"><span class="label">Poste</span><input id="q-poste" value=""></label>
     <label class="field"><span class="label">Type</span><select id="q-type">${opt(TYPES,d.type||"studio")}</select></label>
     <label class="field"><span class="label">Source</span><select id="q-source">${opt(SOURCES,d.source||"outbound")}</select></label>
-    <label class="field full"><span class="label">Activation</span><select id="q-act">${opt(Object.fromEntries(Object.entries(ACT).map(([k,a])=>[k,a.l])),weekUsed()<LIM.week&&boardAccounts().size<LIM.accounts?"semaine":"backlog")}</select></label>`;
+    <label class="field full"><span class="label">Activation</span><select id="q-act">${opt(Object.fromEntries(Object.entries(ACT).map(([k,a])=>[k,a.l])),weekUsed()<LIM.week&&boardAccounts().size<LIM.accounts?"semaine":"now")}</select></label>`;
   if(kind==="compte")body=`<label class="field full"><span class="label">Nom de l'entreprise</span><input id="q-nom" autofocus></label>
     <label class="field"><span class="label">Catégorie</span><select id="q-acat">${opt(ACC_CAT,"da")}</select></label>
     <label class="field"><span class="label">Priorité</span><select id="q-tier">${opt(Object.fromEntries(Object.entries(TIERS).map(([k,t])=>[k,t.l])),"","À définir")}</select></label>
@@ -1477,7 +1578,7 @@ function drawerContact(c){
     <div class="sub">${ctag(c)}${heatPick(c)}${TYPES[c.type]?`<span class="pill">${TYPES[c.type]}</span>`:""}${SOURCES[c.source]?`<span class="pill">${SOURCES[c.source]}</span>`:""}${c.exemple?'<span style="color:var(--faint)">exemple</span>':""}</div></div>
     <button class="round" data-close aria-label="Fermer">×</button></div>
   <div class="drawer-b">
-    ${pros?`<div><p class="label" style="margin:0 0 8px">Niveau d'activation</p><div class="seg-f" role="group" aria-label="Niveau d'activation">${Object.entries(ACT).map(([k,a])=>`<button data-setact="${k}" data-id="${c.id}" aria-pressed="${actv(c)===k}">${a.l}</button>`).join("")}</div></div>`:""}
+    ${pros?`<div><p class="label" style="margin:0 0 8px">Tri & activation${focusManual(c)||onBoard(c)?"":` <span style="text-transform:none;letter-spacing:0;color:var(--faint)">· suggéré : ${FOCUS[focusOf(c)].l} (${esc(suggestFocusWhy(c))})</span>`}</p><div class="seg-f" role="group" aria-label="Niveau d'activation">${Object.entries(ACT).map(([k,a])=>`<button data-setact="${k}" data-id="${c.id}" aria-pressed="${actv(c)===k}">${a.l}</button>`).join("")}</div></div>`:""}
     <div class="facts"><div><span class="label">Board</span><b>${pros?(onBoard(c)?"Prospection":"Base · "+ACT[actv(c)].l):ZONE_L[z]}</b></div>
       <div><span class="label">Dernier contact</span><b>${lc?ago(lc.d):"—"}</b></div>
       <div><span class="label">Prochaine action</span><b class="${pros&&cLate(c)?"late":""}">${c.next&&c.next.date?rel(c.next.date):z==="pipeline"?"Dans l'opportunité":"—"}</b></div></div>
@@ -1718,7 +1819,7 @@ function vParams(){
 /* ───────── Rendu ───────── */
 function render(){
   buildIndex();renderNav();
-  const V={params:vParams,tom:vTom,today:vToday,dues:vDues,prospect:vProspect,pipeline:vPipeline,comptes:vComptes,contacts:vContacts,projets:vProjets,forecast:vForecast,import:vImport}[S.view]||vToday;
+  const V={tri:vTri,params:vParams,tom:vTom,today:vToday,dues:vDues,prospect:vProspect,pipeline:vPipeline,comptes:vComptes,contacts:vContacts,projets:vProjets,forecast:vForecast,import:vImport}[S.view]||vToday;
   const keep=S.view==="import"&&document.getElementById("i-preview");
   if(!keep)document.getElementById("main").innerHTML=V();
   renderLayer();
@@ -1765,6 +1866,9 @@ document.addEventListener("click",async e=>{
     if(await save("contacts",c.id,{chaleur:v,maj:today()}))toast(v?"Chaleur : "+CHALEURS[v]:"Chaleur automatique");return}
   const tp=t.closest("[data-settier]");if(tp){const ac=accounts().find(x=>x.id===tp.dataset.id);if(!ac)return;const id=await materialize(ac);if(!id)return;
     const v=ac.tier===tp.dataset.settier?"":tp.dataset.settier;if(await save("comptes",id,{tier:v}))toast(v?"Priorité : "+TIERS[v].l:"Priorité retirée");if(id!==ac.id)open("compte",id);return}
+  const tg=t.closest("[data-trigo]");if(tg){S.tri.tab=tg.dataset.trigo;S.tri.quick=false;go("tri");return}
+  const tt=t.closest("[data-tritab]");if(tt){S.tri.tab=tt.dataset.tritab;S.tri.quick=false;S.tri.limit=50;S.sel.clear();render();return}
+  const qk=t.closest("[data-quick]");if(qk){await quickPick(qk.dataset.quick);return}
   const sa=t.closest("[data-setact]");if(sa){await setActivation([sa.dataset.id],sa.dataset.setact);return}
   const bk=t.closest("[data-bulk]");if(bk){await setActivation([...S.sel],bk.dataset.bulk);return}
   const af=t.closest("[data-actfilter]");if(af){S.filters.act=af.dataset.actfilter;S._keepAct=true;go("contacts");return}
@@ -1820,6 +1924,10 @@ document.addEventListener("click",async e=>{
     case"sec-off":if(S.bk.secOff){try{await S.db.doc("reglages/securite").set({hash:"",maj:today()});ss.del("crm-unlocked");S.bk.secOff=false;toast("Code retiré")}catch(_){toast("Échec. Réessayez.")}}else{S.bk.secOff=true;render()}break;
     case"clear-filters":clearFilters();render();break;
     case"af-reset":S.af={group:S.af.group};render();break;
+    case"tri-quick":{const ord={now:0,reactivate:1,later:2,out:3};const q=triPool().filter(c=>!focusManual(c)).sort((a,b)=>ord[focusOf(a)]-ord[focusOf(b)]||suggestScore(b)-suggestScore(a)).slice(0,20).map(c=>c.id);
+      S.tri={...S.tri,quick:true,queue:q,i:0,done:0};render();window.scrollTo(0,0);break}
+    case"tri-stop":S.tri.quick=false;render();break;
+    case"tri-more":S.tri.limit+=50;render();break;
     case"toggle-all":S.home.showAll=!S.home.showAll;render();break;
     case"migrate":a.disabled=true;await migrateLegacy();break;
     case"do-import":a.disabled=true;await doImport();break;
@@ -1830,8 +1938,9 @@ document.addEventListener("click",async e=>{
 async function setActivation(ids,level){
   const list=ids.map(id=>S.contacts.find(c=>c.id===id)).filter(c=>c&&cboard(c)==="prospect").sort((a,b)=>suggestScore(b)-suggestScore(a));
   const goesOn=["semaine","actif"].includes(level);let used=weekUsed();const accs=boardAccounts();let ok=0,blocked=0;
+  const isFocus=!!FOCUS[level];
   for(const c of list){
-    const patch={activation:level,maj:today()};
+    const patch=isFocus?{focus:level,activation:"",maj:today()}:{activation:level,maj:today()};
     if(goesOn&&!onBoard(c)){
       const k=compteKey(c)||c.id;
       if(used>=LIM.week||(!accs.has(k)&&accs.size>=LIM.accounts)){blocked++;continue}
@@ -1847,7 +1956,9 @@ async function setActivation(ids,level){
 }
 function fillSuggestions(){
   const room=Math.max(0,Math.min(LIM.week-weekUsed(),LIM.accounts-boardAccounts().size));
-  const pool=S.contacts.filter(c=>cboard(c)==="prospect"&&["backlog","mois"].includes(actv(c))).sort((a,b)=>suggestScore(b)-suggestScore(a));
+  let pool=S.contacts.filter(c=>cboard(c)==="prospect"&&["now","reactivate"].includes(actv(c)));
+  if(!pool.length)pool=S.contacts.filter(c=>cboard(c)==="prospect"&&actv(c)==="later");
+  pool=pool.sort((a,b)=>suggestScore(b)-suggestScore(a));
   const picks=[],accs=boardAccounts();
   for(const c of pool){if(picks.length>=room)break;const k=compteKey(c)||c.id;if(!accs.has(k)&&accs.size>=LIM.accounts)continue;accs.add(k);picks.push(c)}
   return{room,picks};
@@ -1894,9 +2005,9 @@ async function quickSave(kind){
     const f={nom:val("q-nom").trim(),studio:val("q-studio").trim(),poste:val("q-poste").trim(),type:val("q-type"),source:val("q-source")};
     if(!f.nom&&!f.studio){toast("Indiquez au moins un nom.");return}
     f.compteId=f.studio?await ensureCompte(f.studio):"";
-    const lvl=val("q-act")||"backlog",body={...f,activation:"backlog",stage:"a_contacter",relances:0,zone:"fr",next:{date:today(),label:"Envoyer le premier message"},hist:[{d:today(),t:"Fiche créée"}],cree:today(),maj:today()};
+    const lvl=val("q-act")||"now",body={...f,activation:"",stage:"a_contacter",relances:0,zone:"fr",next:{date:today(),label:"Envoyer le premier message"},hist:[{d:today(),t:"Fiche créée"}],cree:today(),maj:today()};
     const id=uid();if(await save("contacts",id,body,true)){
-      if(!S.contacts.some(x=>x.id===id))S.contacts.push(migrate({id,...body}));if(lvl!=="backlog")await setActivation([id],lvl);else toast("Contact créé · en backlog");open("contact",id)}
+      if(!S.contacts.some(x=>x.id===id))S.contacts.push(migrate({id,...body}));await setActivation([id],lvl);open("contact",id)}
   }
   if(kind==="compte"){
     const nom=val("q-nom").trim();if(!nom){toast("Donnez un nom à l'entreprise.");return}
@@ -1975,7 +2086,8 @@ async function migrateLegacy(){
     if(id){await save("contacts",c.id,{stage:"tom",compteId:cid||"",next:null});n++}}
   toast(n+" opportunité(s) créée(s)");
 }
-document.addEventListener("keydown",e=>{if(e.key==="Enter"&&e.target.classList&&e.target.classList.contains("title-edit")){e.preventDefault();const b=document.querySelector('.drawer [data-act^="save-"]');if(b)b.click();return}if(e.key==="Escape"&&S.L)closeLayer()});
+document.addEventListener("keydown",e=>{
+  if(S.view==="tri"&&S.tri.quick&&!S.L&&!/INPUT|TEXTAREA|SELECT/.test((e.target.tagName||""))){const m={"1":"now","2":"reactivate","3":"later","4":"out",ArrowRight:"skip"}[e.key];if(m){e.preventDefault();quickPick(m);return}}if(e.key==="Enter"&&e.target.classList&&e.target.classList.contains("title-edit")){e.preventDefault();const b=document.querySelector('.drawer [data-act^="save-"]');if(b)b.click();return}if(e.key==="Escape"&&S.L)closeLayer()});
 document.addEventListener("input",e=>{
   if(e.target.id&&e.target.closest&&e.target.closest("#layer .drawer")){S.dirty=S.dirty||{};S.dirty[e.target.id]=e.target.type==="checkbox"?e.target.checked:e.target.value}
   const id=e.target.id;
@@ -1984,6 +2096,7 @@ document.addEventListener("input",e=>{
   if(id==="i-paste"){clearTimeout(window._pt);window._pt=setTimeout(()=>{if(e.target.value.trim())fromPaste(e.target.value)},400)}
 });
 document.addEventListener("change",e=>{
+  if(e.target.id==="sel-all-tri"){document.querySelectorAll("input.sel").forEach(x=>e.target.checked?S.sel.add(x.value):S.sel.delete(x.value));render();return}
   if(e.target.dataset&&e.target.dataset.afsel){S.af[e.target.dataset.afsel]=e.target.value;render();return}
   if(e.target.id==="bk-hour"||e.target.id==="bk-auto"){const o={...S.params,backupHour:+val("bk-hour"),backupAuto:val("bk-auto")==="1"};S.params=o;render();if(S.db)S.db.doc("reglages/params").set(o).then(()=>{toast("Réglage enregistré");setTimeout(autoBackupTick,500)}).catch(()=>toast("Réglage non enregistré"));return}
   if(e.target.id&&e.target.closest&&e.target.closest("#layer .drawer")){S.dirty=S.dirty||{};S.dirty[e.target.id]=e.target.type==="checkbox"?e.target.checked:e.target.value}
