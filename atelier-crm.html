@@ -68,12 +68,26 @@ button.pill[aria-pressed="true"]{background:var(--brand);border-color:var(--bran
 .brand{display:flex;flex-direction:column;gap:2px;padding-left:8px}
 .brand b{font-family:var(--f-title);font-weight:400;font-size:30px;line-height:1}
 .brand span{font-size:11.5px;color:var(--muted)}
-.nav{display:flex;flex-direction:column;gap:3px}
-.nav button{display:flex;align-items:center;justify-content:space-between;gap:8px;border:0;background:none;text-align:left;padding:9px 14px;border-radius:999px;color:var(--muted);font-size:13.5px}
+.nav{display:flex;flex-direction:column;gap:2px}
+.nav button{display:flex;align-items:center;gap:10px;border:0;background:none;text-align:left;padding:9px 14px;border-radius:999px;color:var(--muted);font-size:13.5px;width:100%;transition:color .15s,background .15s}
+.nav .nl{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.nav .ni{width:17px;height:17px;flex:none;opacity:.75}
 .nav button:hover{color:var(--fg);background:var(--block)}
 .nav button[aria-current="page"]{color:var(--brand-ink);background:var(--brand)}
-.nav .count{font-size:11px;min-width:20px;text-align:center;padding:1px 7px;border-radius:10px;background:var(--late);color:#fff}
-.nav .count:empty{display:none}
+.nav button[aria-current="page"] .ni{opacity:1}
+.nav-top,.nav-head{color:var(--fg)!important;font-weight:500}
+.nav-top[aria-current="page"]{color:var(--brand-ink)!important}
+.nav-head .car{width:10px;height:10px;flex:none;color:var(--faint);transition:transform .2s}
+.nav-sec.open>.nav-head .car{transform:rotate(90deg)}
+.nav-sec.has-cur:not(.open)>.nav-head{background:var(--block)}
+.nav-sec{margin:6px 0}
+.nav-sub{display:grid;grid-template-rows:0fr;transition:grid-template-rows .22s ease}
+.nav-sec.open>.nav-sub{grid-template-rows:1fr}
+.nav-sub>div{overflow:hidden;display:flex;flex-direction:column;gap:2px;margin-left:16px;padding-left:8px;border-left:1px solid var(--line)}
+.nav-sec.open>.nav-sub>div{padding-top:2px}
+.nav-sub button{padding:7px 12px;font-size:13px}
+.nav .count{font-size:10.5px;font-weight:500;min-width:18px;text-align:center;padding:1px 6px;border-radius:10px;background:var(--late);color:#fff}
+.nav-top+.nav-sec,.nav-sec+.nav-top{margin-top:8px}
 .rail-foot{margin-top:auto;display:flex;align-items:center;justify-content:space-between;gap:8px;padding-left:8px}
 .jn{display:inline-flex;border:1px solid var(--line);border-radius:999px;padding:2px}
 .jn button{border:0;background:none;width:22px;height:22px;border-radius:50%;font-size:10.5px;font-weight:600;color:var(--faint);padding:0}
@@ -385,8 +399,10 @@ details.more .field input,details.more .field select,details.more .field textare
   .rail{position:sticky;top:env(safe-area-inset-top,0px);height:auto;z-index:20;flex-direction:row;align-items:center;gap:12px;padding:10px max(16px,env(safe-area-inset-right,0px)) 10px max(16px,env(safe-area-inset-left,0px));overflow-x:auto;background:var(--bg)}
   body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:10;background:var(--bg)}
   .brand span,.sync{display:none}
-  .nav{flex-direction:row}
-  .nav button{white-space:nowrap;padding:8px 12px}
+  .nav{flex-direction:row;align-items:center}
+  .nav button{white-space:nowrap;padding:8px 12px;width:auto}
+  .nav .ni,.nav-head{display:none!important}
+  .nav-sec{margin:0}.nav-sub,.nav-sec .nav-sub{display:block}.nav-sub>div{flex-direction:row;margin:0;padding:0 0 0 8px;border-left:1px solid var(--line)}
   .rail-foot{margin:0 0 0 auto}
   .game{grid-template-columns:minmax(0,1fr);justify-items:start;padding:20px}
   .goals{grid-template-columns:minmax(0,1fr);width:100%}
@@ -871,13 +887,33 @@ async function boot(){
 /* ───────── Navigation & thème ───────── */
 const VIEWS=[["today","Dashboard"],["dues","Relances dues"],["tri","Tri"],["prospect","Prospection"],["tom","Top of mind"],["pipeline","Pipeline"],["comptes","Accounts"],["contacts","Base de contacts"],["projets","Projets"],["forecast","Revenue forecast"],["import","Importer"],["params","Paramètres"]];
 function dueCount(){return S.contacts.filter(isDue).length+S.opps.filter(o=>OPEN.includes(ostage(o))&&o.next&&o.next.date&&o.next.date<=today()).length}
+/* Menu hiérarchisé : 6 entrées, 3 sections repliables */
+const ICO=d=>`<svg class="ni" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+const NAV=[
+  {v:"today",l:"Dashboard",i:'<rect x="3" y="3" width="6" height="6" rx="2"/><rect x="11" y="3" width="6" height="6" rx="2"/><rect x="3" y="11" width="6" height="6" rx="2"/><rect x="11" y="11" width="6" height="6" rx="2"/>'},
+  {g:"action",l:"Action",i:'<path d="M11 2.5 4.5 11H10l-1 6.5L15.5 9H10z"/>',items:[["dues","Relances dues"],["tri","Tri"]]},
+  {g:"flow",l:"Flow",i:'<path d="M3 7c2.5-3 5-3 7 0s4.5 3 7 0"/><path d="M3 13c2.5-3 5-3 7 0s4.5 3 7 0"/>',items:[["prospect","Prospection"],["tom","Top of mind"],["pipeline","Pipeline"],["projets","Projets"]]},
+  {g:"crm",l:"CRM",i:'<circle cx="8" cy="7" r="3"/><path d="M2.5 16.5c.8-3 3-4.5 5.5-4.5s4.7 1.5 5.5 4.5"/><path d="M13 4.2a3 3 0 0 1 0 5.6M15.5 12.5c1 .8 1.7 2.1 2 4"/>',items:[["comptes","Accounts"],["contacts","Contacts"],["import","Importer"]]},
+  {v:"forecast",l:"Forecast",i:'<path d="M3 16.5h14"/><path d="m3.5 13 4-4 3 3 6-6.5"/><path d="M13 5.5h3.5V9"/>'},
+  {v:"params",l:"Paramètres",i:'<path d="M3 6h8M15 6h2M3 14h2M9 14h8"/><circle cx="13" cy="6" r="2"/><circle cx="7" cy="14" r="2"/>'}
+];
+function navClosed(){try{return JSON.parse(localStorage.getItem("nav-closed")||"{}")}catch(e){return{}}}
 function renderNav(){
-  const due=dueCount();
-  document.getElementById("nav").innerHTML=VIEWS.map(([k,l])=>`<button data-v="${k}" ${S.view===k?'aria-current="page"':""}>${l}<span class="count">${k==="dues"&&due?due:""}</span></button>`).join("");
+  const due=dueCount(),closed=navClosed(),cur=k=>S.view===k?'aria-current="page"':"";
+  const badge=n=>n?`<span class="count">${n}</span>`:"";
+  document.getElementById("nav").innerHTML=NAV.map(n=>{
+    if(n.v)return`<button class="nav-top" data-v="${n.v}" ${cur(n.v)}>${ICO(n.i)}<span class="nl">${n.l}</span></button>`;
+    const inside=n.items.some(([k])=>k===S.view),open=!closed[n.g],dues=n.items.some(([k])=>k==="dues")?due:0;
+    return`<div class="nav-sec ${open?"open":""} ${inside?"has-cur":""}">
+      <button class="nav-head" data-navg="${n.g}" aria-expanded="${open}">${ICO(n.i)}<span class="nl">${n.l}</span>${!open?badge(dues):""}<svg class="car" viewBox="0 0 10 10" aria-hidden="true"><path d="M3 2l3.5 3L3 8" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+      <div class="nav-sub"><div>${n.items.map(([k,l])=>`<button data-v="${k}" ${cur(k)}><span class="nl">${l}</span>${k==="dues"?badge(due):""}</button>`).join("")}</div></div></div>`}).join("");
 }
 function clearFilters(){S.filters={q:"",type:"",source:"",board:"",chaleur:"",act:S.filters.act&&S._keepAct?S.filters.act:""};S._keepAct=false}
-function go(v){if(v!==S.view)clearFilters();S.view=v;location.hash=v;render();window.scrollTo(0,0)}
-document.getElementById("nav").addEventListener("click",e=>{const b=e.target.closest("button[data-v]");if(b)go(b.dataset.v)});
+function go(v){if(v!==S.view)clearFilters();{const sec=NAV.find(n=>n.items&&n.items.some(([k])=>k===v)),c=navClosed();if(sec&&c[sec.g]){delete c[sec.g];try{localStorage.setItem("nav-closed",JSON.stringify(c))}catch(e){}}}S.view=v;location.hash=v;render();window.scrollTo(0,0)}
+document.getElementById("nav").addEventListener("click",e=>{
+  const h=e.target.closest("[data-navg]");if(h){const c=navClosed(),g=h.dataset.navg,sec=h.parentElement;
+    c[g]=sec.classList.contains("open");try{localStorage.setItem("nav-closed",JSON.stringify(c))}catch(e){}renderNav();return}
+  const b=e.target.closest("button[data-v]");if(b)go(b.dataset.v)});
 window.addEventListener("hashchange",()=>{const h=location.hash.slice(1);if(VIEWS.some(v=>v[0]===h)&&h!==S.view){clearFilters();S.view=h;render()}});
 {const h=location.hash.slice(1);if(VIEWS.some(v=>v[0]===h))S.view=h;}
 function currentTheme(){const s=store.get("crm-theme");if(s==="light"||s==="dark")return s;return window.matchMedia&&matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"}
